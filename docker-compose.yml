@@ -1,0 +1,10 @@
+services:
+  api:
+    build:
+      context: apps/api
+      dockerfile: Dockerfile
+    container_name: compliance-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./apps/api/app:/app/app
