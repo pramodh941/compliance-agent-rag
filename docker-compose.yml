@@ -8,3 +8,30 @@ services:
       - "8000:8000"
     volumes:
       - ./apps/api/app:/app/app
+    depends_on:
+      - postgres
+      - qdrant
+
+  postgres:
+    image: postgres:16
+    container_name: compliance-postgres
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: compliance
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  qdrant:
+    image: qdrant/qdrant
+    container_name: compliance-qdrant
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+volumes:
+  pgdata:
+  qdrant_data:
