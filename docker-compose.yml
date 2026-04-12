@@ -32,6 +32,16 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
 
+  ollama:
+    image: ollama/ollama
+    container_name: compliance-ollama
+    platform: linux/amd64
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
 volumes:
   pgdata:
   qdrant_data:
+  ollama_data:
