@@ -11,7 +11,9 @@ __pycache__/
 node_modules/
 
 # Data
-data/
+data/*
+!apps/api/app/data/
+!apps/api/app/data/emails.json
 
 # VS Code
 .vscode/

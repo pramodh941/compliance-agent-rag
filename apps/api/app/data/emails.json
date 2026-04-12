@@ -1,0 +1,20 @@
+[
+  {
+    "id": "e1",
+    "sender": "trader@company.com",
+    "text": "This is confidential information, do not share",
+    "channel": "email"
+  },
+  {
+    "id": "e2",
+    "sender": "employee@company.com",
+    "text": "Let’s move this to WhatsApp",
+    "channel": "teams"
+  },
+  {
+    "id": "e3",
+    "sender": "hr@company.com",
+    "text": "We received a gift from vendor",
+    "channel": "email"
+  }
+]
