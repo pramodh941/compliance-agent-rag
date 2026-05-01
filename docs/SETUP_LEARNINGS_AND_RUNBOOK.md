@@ -1,0 +1,323 @@
+# 🧠 Compliance Agent RAG – Setup Learnings & Runbook
+
+## 📌 Overview
+
+This document captures the **real-world issues, debugging steps, fixes, and working commands** discovered while getting the system up and running locally using Docker, FastAPI, Ollama, Qdrant, and Postgres.
+
+---
+
+# 🚀 What Actually Matters (Reality Check)
+
+Getting the system “up” is not enough. The pipeline only works when:
+
+1. ✅ Containers are running
+2. ✅ Models are pulled in Ollama
+3. ✅ Qdrant collection exists
+4. ✅ Postgres tables exist
+5. ✅ Data is ingested + indexed
+
+Missing *any one* of these → **500 errors guaranteed**
+
+---
+
+# 🐳 Docker Learnings (Critical)
+
+## 🔴 Issue: Containers exiting randomly
+
+Seen as:
+
+```
+Exited (137)
+```
+
+### ✅ Fix
+
+```
+docker compose down
+docker compose up -d
+```
+
+---
+
+## 🔴 Issue: Ollama container running but no models
+
+Symptoms:
+
+* `/api/embeddings` → 404
+
+### ✅ Fix
+
+```
+docker exec -it compliance-ollama ollama pull nomic-embed-text
+docker exec -it compliance-ollama ollama pull gemma:2b
+```
+
+### 🔍 Learning
+
+Ollama does NOT auto-download models.
+
+---
+
+## 🔴 Issue: Services not reachable
+
+### Debug commands
+
+```
+docker ps
+docker logs <container_name>
+```
+
+---
+
+# 🧠 RAG Pipeline Learnings
+
+## 🔴 Issue: Qdrant collection not found
+
+Error:
+
+```
+Collection `policies` doesn’t exist
+```
+
+### ✅ Fix
+
+Run indexing:
+
+```
+curl -X POST http://localhost:8000/index-policies
+```
+
+---
+
+## 🔴 Issue: QA endpoint returns 500
+
+Root causes seen:
+
+* Missing embeddings model
+* Missing Qdrant collection
+
+### ✅ Fix Order
+
+1. Pull models
+2. Start containers
+3. Index policies
+4. Then query
+
+---
+
+## 🔴 Issue: Model gives wrong answers despite correct context
+
+Example:
+
+* Context clearly says: "Do not use WhatsApp"
+* Model says: "Not found"
+
+### ✅ Fix
+
+Improve prompt in `rag_service.py`
+
+Add:
+
+```
+- Answer ONLY from context
+- If answer exists, do NOT say 'not found'
+- Be direct and explicit
+```
+
+### 🔍 Learning
+
+Small models (gemma:2b) are weak at reasoning even with correct retrieval.
+
+---
+
+# 🗄️ Postgres Learnings
+
+## 🔴 Issue: Table does not exist
+
+Error:
+
+```
+relation "alerts" does not exist
+```
+
+### ✅ Fix
+
+Create table manually:
+
+```
+docker exec -it compliance-postgres psql -U <your_user> -d <your_db>
+```
+
+Then:
+
+```
+CREATE TABLE alerts (
+  email_id TEXT,
+  rule_type TEXT,
+  message TEXT,
+  PRIMARY KEY (email_id, rule_type, message)
+);
+```
+
+### 🔍 Learning
+
+No migrations are set up yet → schema must be created manually.
+
+---
+
+# 📥 Ingestion Learnings
+
+## 🔴 Issue: `/ingest` failing
+
+Root cause:
+
+* Missing DB table
+
+### ✅ Fix
+
+Create table → re-run ingestion
+
+---
+
+## ✅ Working command
+
+```
+curl -X POST http://localhost:8000/ingest
+```
+
+---
+
+# 📚 Policy Indexing
+
+## ✅ Working command
+
+```
+curl -X POST http://localhost:8000/index-policies
+```
+
+### What it does:
+
+* Reads `policies.txt`
+* Splits into chunks
+* Generates embeddings via Ollama
+* Stores in Qdrant
+
+---
+
+# ❓ QA Endpoint Usage
+
+## ⚠️ Common mistake
+
+Spaces in query break curl
+
+### ❌ Wrong
+
+```
+...query=What is GDPR compliance?
+```
+
+### ✅ Correct
+
+```
+curl -X POST "http://localhost:8000/qa?query=What%20is%20GDPR%20compliance?"
+```
+
+---
+
+# 🧪 Full Working Flow (Golden Path)
+
+Run these in order:
+
+### 1️⃣ Start system
+
+```
+docker compose up -d
+```
+
+### 2️⃣ Pull models (only first time)
+
+```
+docker exec -it compliance-ollama ollama pull nomic-embed-text
+docker exec -it compliance-ollama ollama pull gemma:2b
+```
+
+### 3️⃣ Create DB table (one-time)
+
+```
+docker exec -it compliance-postgres psql -U <user> -d <db>
+```
+
+Run SQL:
+
+```
+CREATE TABLE alerts (...);
+```
+
+### 4️⃣ Run ingestion
+
+```
+curl -X POST http://localhost:8000/ingest
+```
+
+### 5️⃣ Index policies
+
+```
+curl -X POST http://localhost:8000/index-policies
+```
+
+### 6️⃣ Ask question
+
+```
+curl -X POST "http://localhost:8000/qa?query=Your%20question"
+```
+
+---
+
+# ⚡ Performance Expectations
+
+* Embeddings: fast (sub-second per chunk)
+* Retrieval: fast
+* Generation (gemma:2b CPU): 1–5 seconds
+
+---
+
+# 🧩 Current Limitations
+
+1. ❌ No DB migrations
+2. ❌ Weak LLM (poor reasoning)
+3. ❌ No reranker integration yet
+4. ❌ No structured prompts / guardrails
+5. ❌ Scripts folder empty (manual ops required)
+
+---
+
+# 🚀 Suggested Next Improvements
+
+* Add DB migration script
+* Add ingestion script (non-API)
+* Integrate reranker
+* Upgrade model (Mixtral / Llama3 via GPU or cloud)
+* Improve prompt templates
+
+---
+
+# 💡 Key Takeaway
+
+This system is **pipeline-sensitive**:
+
+> Retrieval, embeddings, DB, and model must ALL be correctly initialized.
+
+Most failures were not code bugs — they were **missing system state**.
+
+---
+
+# 🏁 Status
+
+✅ End-to-end pipeline working
+✅ API functional
+✅ RAG loop complete
+⚠️ Answer quality limited by model
+
+---
+
+This document should save hours of debugging for anyone running this repo next time 🚀

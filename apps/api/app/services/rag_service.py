@@ -24,7 +24,15 @@ def answer_question(query: str):
     # prompt
     prompt = f"""
 You are a compliance assistant.
-Based ONLY on the context below, answer the question in 2-3 sentences.
+
+Use the provided context to answer the question.
+
+Rules:
+- You MUST base your answer on the context
+- You CAN infer logical conclusions from the context
+- Be clear and direct
+- If the answer is not present at all, say: "Not found in provided policies"
+
 Context:
 {context}
 

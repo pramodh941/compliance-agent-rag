@@ -4,14 +4,14 @@ OLLAMA_URL = "http://ollama:11434"
 
 def get_embedding(text: str):
     response = requests.post(
-        f"{OLLAMA_URL}/api/embeddings",
+        f"{OLLAMA_URL}/api/embed",
         json={
             "model": "nomic-embed-text",
-            "prompt": text
+            "input": text
         }
     )
     response.raise_for_status()
-    return response.json()["embedding"]
+    return response.json()["embeddings"][0]
 
 
 def generate_response(prompt: str):

@@ -41,7 +41,29 @@ services:
     volumes:
       - ollama_data:/root/.ollama
 
+  reranker:
+    image: michaelf34/infinity:latest-cpu
+    container_name: compliance-reranker
+    ports:
+      - "7997:7997"
+    command: >
+      v2
+      --model-id cross-encoder/ms-marco-MiniLM-L-6-v2
+      --port 7997
+      --engine torch
+    environment:
+      - DO_NOT_TRACK=1
+    volumes:
+      - infinity_cache:/app/.cache
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7997/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 volumes:
   pgdata:
   qdrant_data:
   ollama_data:
+  infinity_cache:
