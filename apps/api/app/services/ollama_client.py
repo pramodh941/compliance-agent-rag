@@ -7,7 +7,7 @@ def get_embedding(text: str):
         f"{OLLAMA_URL}/api/embed",
         json={
             "model": "nomic-embed-text",
-            "input": text
+            "input": text[:8000]  # 🔥 hard safety cap
         }
     )
     response.raise_for_status()

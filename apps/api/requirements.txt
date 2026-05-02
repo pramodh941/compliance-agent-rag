@@ -3,3 +3,5 @@ uvicorn[standard]
 psycopg2-binary
 qdrant-client
 requests
+pymupdf4llm
+cryptography>=3.1
