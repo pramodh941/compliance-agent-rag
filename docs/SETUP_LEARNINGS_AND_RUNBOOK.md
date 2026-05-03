@@ -504,3 +504,62 @@ Your system is now:
 * Add structured evaluation
 
 ---
+
+# ⚖️ Reranker On vs Off – Observations
+
+## 🧪 Setup
+- Tested with reranker container **ON vs OFF**
+- Same queries executed across both setups
+
+---
+
+## 🚀 Observations
+
+### ✅ Without reranker
+- Responses returned **faster (<30s on CPU)**
+- System remained **stable even when reranker unavailable**
+- Retrieval quality **acceptable but less precise**
+- More cases of:
+  - Irrelevant chunks
+  - “Not found” despite partial context
+
+---
+
+### ⚠️ With reranker (cross-encoder on CPU)
+- Significant **latency increase**
+- Frequent **timeouts / failures**
+- Better **chunk relevance when it works**
+- Not reliable for local CPU testing
+
+---
+
+## 🧠 Key Learnings
+
+- Cross-encoder rerankers are **computationally expensive**
+- CPU-based reranking is **not practical for low-latency systems**
+- A **fallback mechanism is essential** (system should not fail if reranker is down)
+- Vector search alone is **fast but less precise**
+- Reranker improves **precision, not recall**
+
+---
+
+## 🏗️ Industry Insight
+
+Production systems typically:
+
+- Use **GPU-based rerankers** OR
+- Use **lighter / distilled rerankers** OR
+- Skip reranking and rely on:
+  - Better embeddings
+  - Hybrid search (BM25 + vector)
+  - Query rewriting
+
+---
+
+## 🔧 Current Decision
+
+- Keep reranker as **optional (fallback-safe) component**
+- Default mode can run **without reranker for local testing**
+- Plan to revisit reranker during **GCP deployment (GPU)**
+
+---
