@@ -3,7 +3,7 @@ import requests
 RERANKER_URL = "http://compliance-reranker:7997/rerank"
 
 
-def rerank(query: str, documents: list[str]) -> list[str]:
+def rerank(query: str, documents: list[str]) -> list[dict]:
     if not documents:
         return []
 
@@ -19,7 +19,6 @@ def rerank(query: str, documents: list[str]) -> list[str]:
         response.raise_for_status()
 
         data = response.json()
-
         results = data.get("results", [])
 
         ranked = sorted(
@@ -28,9 +27,19 @@ def rerank(query: str, documents: list[str]) -> list[str]:
             reverse=True
         )
 
-        # IMPORTANT: index maps back to original docs
-        return [documents[r["index"]] for r in ranked if "index" in r]
+        return [
+            {
+                "text": documents[r["index"]],
+                "score": r.get("relevance_score", 0)
+            }
+            for r in ranked if "index" in r
+        ]
 
     except Exception as e:
         print(f"[reranker error] {e}")
-        return documents
+
+        # ✅ FIX: return SAME STRUCTURE
+        return [
+            {"text": doc, "score": 0}
+            for doc in documents
+        ]

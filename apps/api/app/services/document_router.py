@@ -1,20 +1,12 @@
-from app.services.sec_pdf_parser import extract_text_from_pdf
+import pymupdf4llm
 
-def route_document(file_path: str, file_type: str = "pdf") -> str:
-    """
-    Simple document router (initial version).
-    Will expand later for OCR / multimodal docs.
-    """
+def route_document(path: str, doc_type: str):
+    if doc_type == "pdf":
+        pages = pymupdf4llm.to_markdown(
+            path,
+            page_chunks=True
+        )
 
-    if file_type == "pdf":
-        return extract_text_from_pdf(file_path)
+        return pages  # IMPORTANT: return structured pages
 
-    # future extensions:
-    # elif file_type == "image_pdf":
-    #     return ocr_extract(file_path)
-
-    # elif file_type == "text":
-    #     return open(file_path).read()
-
-    else:
-        raise ValueError(f"Unsupported file type: {file_type}")
+    raise ValueError(f"Unsupported document type: {doc_type}")

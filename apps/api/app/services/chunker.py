@@ -1,19 +1,26 @@
-import re
+from typing import List
 
-def clean_text(text: str) -> str:
-    return re.sub(r'\s+', ' ', text).strip()
+def chunk_text(text: str, chunk_size: int = 500, overlap: int = 100) -> List[str]:
+    if not text:
+        return []
 
-
-def chunk_text(text: str, chunk_size: int = 800, overlap: int = 100):
-    text = clean_text(text)
-
-    words = text.split()
     chunks = []
+    start = 0
+    text_length = len(text)
 
-    i = 0
-    while i < len(words):
-        chunk = words[i:i + chunk_size]
-        chunks.append(" ".join(chunk))
-        i += chunk_size - overlap
+    while start < text_length:
+        end = start + chunk_size
+        chunk = text[start:end]
+
+        # avoid cutting mid-sentence (basic improvement)
+        if end < text_length:
+            last_period = chunk.rfind(".")
+            if last_period > 200:  # ensure meaningful split
+                end = start + last_period + 1
+                chunk = text[start:end]
+
+        chunks.append(chunk.strip())
+
+        start = end - overlap
 
     return chunks

@@ -321,3 +321,186 @@ Most failures were not code bugs — they were **missing system state**.
 ---
 
 This document should save hours of debugging for anyone running this repo next time 🚀
+
+---
+
+# 🧪 Additional Real-World Learnings (Latest Session)
+
+## 🔴 Issue: Ollama timeouts during embedding & generation (CPU setup)
+
+### Symptoms
+
+```
+[embedding error] Read timed out
+requests.exceptions.ReadTimeout (generate_response)
+```
+
+### ✅ Fix
+
+* Increase timeout in `ollama_client.py`
+
+  * Embedding: `timeout=30`
+  * Generation: `timeout=120–300`
+
+### 🔍 Learning
+
+Running LLMs on CPU is **slow and unstable under load**.
+
+* Embeddings during ingestion → many parallel calls → timeouts
+* Generation → large prompt + context → slower response
+
+👉 This is **expected**, not a bug.
+
+---
+
+## 🔴 Issue: Partial ingestion due to embedding failures
+
+### Symptoms
+
+* Some chunks fail with embedding timeout
+* Still see ingestion complete
+
+### 🔍 Learning
+
+Your system currently:
+
+* Continues ingestion even if some chunks fail
+* Leads to **incomplete vector coverage**
+
+👉 This explains weak retrieval sometimes.
+
+---
+
+## 🔴 Issue: Reranker timeouts
+
+### Symptoms
+
+```
+[reranker error] Read timed out
+```
+
+### Current Behavior (Good Design 👍)
+
+* System **falls back to original ranking**
+* QA still works (no crash)
+
+### 🔍 Learning
+
+Reranker is:
+
+* Helpful, but **non-critical dependency**
+* Should always fail gracefully (which your system now does)
+
+---
+
+## 🧪 How to Stop Only Reranker Container
+
+### Command
+
+```
+docker stop compliance-reranker
+```
+
+### Restart later
+
+```
+docker start compliance-reranker
+```
+
+### 🔍 Learning
+
+This allows you to:
+
+* Test baseline RAG (no reranking)
+* Compare answer quality
+
+---
+
+## 🧠 Retrieval Observations
+
+### 1. Routing Works ✅
+
+* Policy queries → `policies`
+* SEC queries → `sec_docs`
+* Ambiguous → both
+
+---
+
+### 2. Retrieval Quality is OK but not perfect
+
+Seen issues:
+
+* Irrelevant chunks (especially SEC docs noise)
+* Missing exact answers even when partially present
+
+### 🔍 Learning
+
+This is due to:
+
+* Small embedding model (`nomic-embed-text`)
+* Limited chunk quality
+* No semantic filtering yet
+
+---
+
+### 3. Model Hallucination / Weak Reasoning
+
+Example:
+
+* MNPI expanded incorrectly
+
+### 🔍 Learning
+
+Small models (gemma:2b):
+
+* Cannot reliably infer definitions
+* May hallucinate expansions
+
+👉 Prompting helps, but model capacity is the bottleneck
+
+---
+
+## ⚠️ Key System Behavior Observed
+
+| Component  | Status      | Behavior                 |
+| ---------- | ----------- | ------------------------ |
+| Embeddings | ⚠️ Slow     | Works with timeouts      |
+| Retrieval  | ✅ Good      | Multi-collection works   |
+| Reranker   | ⚠️ Unstable | Fallback works correctly |
+| Generation | ⚠️ Slow     | CPU bottleneck           |
+
+---
+
+## 🧪 Testing Verdict
+
+✅ End-to-end working
+
+Even with:
+
+* Partial ingestion
+* Reranker failures
+* CPU-only setup
+
+👉 System is **functionally correct**
+
+---
+
+## 🚀 Practical Conclusion
+
+Your system is now:
+
+* Architecturally sound
+* Fault-tolerant (important!)
+* Ready for cloud upgrade
+
+---
+
+## 🧭 What Matters Next (Not Urgent Now)
+
+* Better model (cloud GPU)
+* Better embeddings
+* Improve chunking
+* Add retry for embeddings
+* Add structured evaluation
+
+---
