@@ -1,14 +1,18 @@
 from app.dependencies.qdrant import get_qdrant_client
 from app.services.ollama_client import get_embedding, generate_response
 from app.dependencies.reranker import rerank
-
-# 🔥 NEW
 from app.services.hybrid_retriever import hybrid_retriever
+
+# 🔥 CACHE
+from app.services.cache import get_cache
+
+cache = get_cache()
 
 COLLECTIONS = {
     "policies": "Internal company policies like MNPI, gifts, communication",
     "sec_docs": "SEC regulatory documents, rules, risk alerts"
 }
+
 
 def route_query(query: str) -> list:
     query_lower = query.lower()
@@ -28,10 +32,29 @@ def route_query(query: str) -> list:
 
 def answer_question(query: str):
     print(f"\n[RAG] Incoming query: {query}")
+
+    # =========================
+    # 🔥 RESPONSE CACHE (FAST PATH)
+    # =========================
+    cached = cache.get(f"response:{query}")
+    if cached:
+        print("[CACHE] Response hit")
+        return cached
+
     qdrant = get_qdrant_client()
 
-    # 1. Embed query
-    query_vector = get_embedding(query)
+    # =========================
+    # 🔥 EMBEDDING
+    # =========================
+    query_vector = cache.get(f"embedding:{query}")
+
+    if query_vector:
+        print("[CACHE] Embedding hit")
+    else:
+        query_vector = get_embedding(query)
+        cache.set(f"embedding:{query}", query_vector)
+        print("[CACHE] Embedding stored")
+
     if not query_vector:
         return {
             "answer": "Failed to process query",
@@ -70,10 +93,7 @@ def answer_question(query: str):
     sparse_chunks = hybrid_retriever.search(query, k=5)
     print(f"[RAG] Retrieved {len(sparse_chunks)} BM25 chunks")
 
-    # 🔹 MERGE + DEDUPE
-    all_chunks_dict = {
-        c["text"]: c for c in dense_chunks
-    }
+    all_chunks_dict = {c["text"]: c for c in dense_chunks}
 
     for c in sparse_chunks:
         if c["text"] not in all_chunks_dict:
@@ -84,10 +104,12 @@ def answer_question(query: str):
     print(f"[RAG] Total merged chunks: {len(all_chunks)}")
 
     if not all_chunks:
-        return {
+        result = {
             "answer": "Not found in provided documents",
             "context_used": ""
         }
+        cache.set(f"response:{query}", result)
+        return result
 
     # 🔹 RERANK
     print(f"[RAG] Sending {len(all_chunks)} chunks to reranker")
@@ -108,18 +130,18 @@ def answer_question(query: str):
             break
 
     if not top_chunks:
-        return {
+        result = {
             "answer": "Not found in provided documents",
             "context_used": ""
         }
+        cache.set(f"response:{query}", result)
+        return result
 
-    # 🔹 CONTEXT
     context = "\n\n".join([
         f"[Source: {c['source']} | Page: {c['page']}]\n{c['text'][:400]}"
         for c in top_chunks
     ])
 
-    # 🔹 PROMPT
     prompt = f"""
 You are a compliance assistant.
 
@@ -143,7 +165,12 @@ Answer:
 
     answer = generate_response(prompt)
 
-    return {
+    result = {
         "answer": answer,
         "context_used": context
     }
+
+    cache.set(f"response:{query}", result)
+    print("[CACHE] Response stored")
+
+    return result

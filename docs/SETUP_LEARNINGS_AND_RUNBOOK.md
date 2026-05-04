@@ -563,3 +563,99 @@ Production systems typically:
 - Plan to revisit reranker during **GCP deployment (GPU)**
 
 ---
+
+## 🚀 RAG Enhancements: Hybrid Retrieval + Caching Layer (2026-05-04)
+
+### 🧠 What was added
+
+We introduced a lightweight caching layer and reinforced hybrid retrieval in the RAG pipeline to improve latency, reduce redundant computation, and stabilize response quality.
+
+---
+
+## ⚡ 1. Caching Layer (In-Memory TTL Cache)
+
+### 📌 Purpose
+Reduce repeated computation for:
+- Embeddings (expensive model calls)
+- Final LLM responses (repeat queries)
+
+### 📌 Implementation
+We implemented a simple in-memory TTL cache:
+
+- `apps/api/app/services/cache.py`
+  - `SimpleTTLCache` with expiration support
+- `apps/api/app/dependencies/cache.py`
+  - Separate cache instances:
+    - `embedding_cache` (TTL: 1 hour)
+    - `retrieval_cache` (TTL: 5 minutes conceptually used for responses)
+
+### 📌 Usage in RAG pipeline
+In `rag_service.py`:
+- Response-level caching:
+  - `cache.get("response:{query}")`
+  - `cache.set("response:{query}", result)`
+- Embedding-level caching:
+  - `cache.get("embedding:{query}")`
+  - avoids recomputing embeddings for repeated queries
+
+### 📌 Benefits
+- Eliminates duplicate LLM calls for repeated questions
+- Reduces embedding generation cost
+- Improves perceived API latency significantly
+
+---
+
+## 🔍 2. Hybrid Retrieval (Dense + Sparse)
+
+### 📌 Architecture
+We use a hybrid approach:
+- **Dense retrieval** → Qdrant vector search
+- **Sparse retrieval** → BM25 (rank_bm25)
+
+### 📌 Flow
+1. Query is routed to collections (policy vs SEC docs)
+2. Dense vectors retrieved from Qdrant
+3. BM25 retrieves keyword-based matches
+4. Both results are merged + deduplicated
+5. Final chunks passed to reranker
+
+---
+
+## 🧩 3. Observed Behavior
+
+### ✅ Working correctly:
+- Cache hits logged:
+  - `[CACHE] Response hit`
+  - `[CACHE] Embedding stored`
+- Hybrid retrieval returning both:
+  - Qdrant (semantic)
+  - BM25 (lexical)
+- Reranker improving final context selection
+
+### ⚠️ Known issue:
+- Occasional reranker timeout:
+
+Needs:
+- timeout tuning OR
+- retry fallback OR
+- async batching optimization
+
+---
+
+## 📈 Impact
+
+| Component        | Improvement |
+|----------------|-------------|
+| Embeddings     | Reduced duplicate calls |
+| Response time  | Faster repeated queries |
+| Retrieval      | More robust (semantic + keyword) |
+| System design  | Cache-ready for future Redis migration |
+
+---
+
+## 🔮 Next Steps
+
+- Replace in-memory cache with Redis (GCP Memorystore compatible)
+- Add cache invalidation strategy for document updates
+- Improve reranker resilience (timeouts + fallback scoring)
+- Add cache metrics (hit/miss logging)
