@@ -123,12 +123,14 @@ def answer_question(query: str):
     prompt = f"""
 You are a compliance assistant.
 
-Use ONLY the provided context to answer the question.
+Answer the question using ONLY the provided context.
 
 Rules:
-- Do NOT use outside knowledge
-- If the answer is not explicitly present, say: "Not found in provided documents"
-- Be precise and cite the source if possible
+- Use the context to infer answers when possible (do NOT require exact sentence match)
+- If the answer is partially available, summarize it clearly
+- Only say "Not found in provided documents" if there is truly no relevant information
+- Always be concise and factual
+- Cite source and page when possible
 
 Context:
 {context}
