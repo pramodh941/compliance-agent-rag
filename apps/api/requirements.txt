@@ -5,3 +5,4 @@ qdrant-client
 requests
 pymupdf4llm
 cryptography>=3.1
+rank-bm25

@@ -2,6 +2,9 @@ from app.dependencies.qdrant import get_qdrant_client
 from app.services.ollama_client import get_embedding, generate_response
 from app.dependencies.reranker import rerank
 
+# 🔥 NEW
+from app.services.hybrid_retriever import hybrid_retriever
+
 COLLECTIONS = {
     "policies": "Internal company policies like MNPI, gifts, communication",
     "sec_docs": "SEC regulatory documents, rules, risk alerts"
@@ -20,8 +23,8 @@ def route_query(query: str) -> list:
     ]):
         return ["policies"]
 
-    # fallback → search both
     return ["policies", "sec_docs"]
+
 
 def answer_question(query: str):
     print(f"\n[RAG] Incoming query: {query}")
@@ -34,78 +37,89 @@ def answer_question(query: str):
             "answer": "Failed to process query",
             "context_used": ""
         }
-    print(f"[RAG] Query embedding generated: {'yes' if query_vector else 'no'}")
+
+    print(f"[RAG] Query embedding generated: yes")
 
     collections = route_query(query)
     print(f"[RAG] Routed to collections: {collections}")
 
-    all_points = []
+    dense_chunks = []
 
-    # 2. Retrieve from all relevant collections
+    # 🔹 DENSE RETRIEVAL
     for col in collections:
         results = qdrant.query_points(
             collection_name=col,
             query=query_vector,
             limit=5
         )
+
         print(f"[RAG] Retrieved {len(results.points)} points from {col}")
-        all_points.extend(results.points)
 
-    print(f"[RAG] Total retrieved points: {len(all_points)}")
+        dense_chunks.extend([
+            {
+                "text": p.payload["text"],
+                "source": p.payload.get("source"),
+                "page": p.payload.get("page"),
+                "doc_type": p.payload.get("doc_type"),
+                "score": p.score
+            }
+            for p in results.points
+        ])
 
-    # 3. Handle no results AFTER loop
-    if not all_points:
-        print("[RAG] No results found")
+    # 🔹 SPARSE RETRIEVAL (BM25)
+    sparse_chunks = hybrid_retriever.search(query, k=5)
+    print(f"[RAG] Retrieved {len(sparse_chunks)} BM25 chunks")
+
+    # 🔹 MERGE + DEDUPE
+    all_chunks_dict = {
+        c["text"]: c for c in dense_chunks
+    }
+
+    for c in sparse_chunks:
+        if c["text"] not in all_chunks_dict:
+            all_chunks_dict[c["text"]] = c
+
+    all_chunks = list(all_chunks_dict.values())
+
+    print(f"[RAG] Total merged chunks: {len(all_chunks)}")
+
+    if not all_chunks:
         return {
             "answer": "Not found in provided documents",
             "context_used": ""
         }
 
-    # 4. Extract text + metadata (IMPORTANT UPGRADE 🔥)
-    chunks = [
-        {
-            "text": p.payload["text"],
-            "source": p.payload.get("source"),
-            "page": p.payload.get("page"),
-            "doc_type": p.payload.get("doc_type"),
-            "score": p.score
-        }
-        for p in all_points
-    ]
-
-    # 5. Rerank (pass only text to model)
-    print(f"[RAG] Sending {len(chunks)} chunks to reranker")
-    reranked = rerank(query, [c["text"] for c in chunks[:6]])
-    print(f"[RAG] Reranker returned {len(reranked)} results")
+    # 🔹 RERANK
+    print(f"[RAG] Sending {len(all_chunks)} chunks to reranker")
+    reranked = rerank(query, [c["text"] for c in all_chunks[:8]])
 
     top_chunks = []
     used = set()
 
     for r in reranked:
-        for i, c in enumerate(chunks):
+        for i, c in enumerate(all_chunks):
             if c["text"] == r["text"] and i not in used:
-                c["rerank_score"] = r["score"]  # optional but useful
+                c["rerank_score"] = r.get("score", 0)
                 top_chunks.append(c)
                 used.add(i)
                 break
 
         if len(top_chunks) == 2:
             break
-    
+
     if not top_chunks:
-        print("[RAG] No top chunks after reranking")
         return {
             "answer": "Not found in provided documents",
             "context_used": ""
         }
 
-    # 7. Build context with traceability
+    # 🔹 CONTEXT
     context = "\n\n".join([
         f"[Source: {c['source']} | Page: {c['page']}]\n{c['text'][:400]}"
         for c in top_chunks
     ])
 
-    # 8. Prompt
+    # 🔹 PROMPT
     prompt = f"""
 You are a compliance assistant.
 
