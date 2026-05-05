@@ -12,6 +12,18 @@ services:
       - postgres
       - qdrant
 
+  mcp-server:
+    build:
+      context: apps/mcp-server
+      dockerfile: Dockerfile
+    container_name: compliance-mcp
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./apps/mcp-server/server:/app/server
+    depends_on:
+      - api
+
   postgres:
     image: postgres:16
     container_name: compliance-postgres

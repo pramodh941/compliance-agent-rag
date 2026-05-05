@@ -659,3 +659,174 @@ Needs:
 - Add cache invalidation strategy for document updates
 - Improve reranker resilience (timeouts + fallback scoring)
 - Add cache metrics (hit/miss logging)
+
+## 🚀 Session Update: Hybrid RAG + Compliance Scan + MCP Integration
+
+### ✅ What Was Implemented
+
+#### 1. Hybrid Retrieval (Dense + BM25)
+- Added BM25-based sparse retrieval using `hybrid_retriever`
+- Combined with vector search (Qdrant) for improved recall
+- Enabled for both:
+  - `sec_docs`
+  - `policies`
+- Observed improved chunk coverage and retrieval diversity
+
+---
+
+#### 2. Multi-Level Caching
+- Implemented in-memory TTL cache:
+  - Embedding cache
+  - Response cache
+- Reduced redundant LLM + embedding calls
+- Verified via logs (`[CACHE] hit`)
+
+---
+
+#### 3. Compliance Scan Pipeline
+- New service: `compliance_service.py`
+- Flow:
+  - Fetch email (JSON-based mock DB)
+  - Retrieve relevant policies via RAG
+  - Run LLM-based violation detection
+- Output:
+  - violations[]
+  - risk_level
+  - explanation
+
+---
+
+#### 4. MCP Server Integration
+- Built MCP tool: `compliance_scan`
+- Registered via decorator pattern
+- Exposed via `/execute` endpoint
+- Enabled agent/tool-based invocation
+
+---
+
+#### 5. LangGraph Agent Integration
+- Added MCP tool call node
+- Agent can now:
+  - Route to compliance scan
+  - Execute via MCP
+- Clean separation between:
+  - Agent logic
+  - Tool execution
+  - Backend services
+
+---
+
+### 🔍 Key Observations
+
+- Retrieval quality directly impacts compliance detection accuracy
+- Policies must include:
+  - explicit indicators
+  - keywords / patterns
+- LLM requires strong prompting for:
+  - risk sensitivity
+  - partial violation detection
+- BM25 significantly improved recall vs vector-only search
+
+---
+
+### ⚠️ Issues Faced
+
+- Missing BM25 for policies → fixed
+- MCP tool not found → missing import in `main.py`
+- Reranker startup delay → requires warm-up / retry handling
+- Weak policy definitions → caused false negatives
+
+---
+
+### 🔐 Security / Repo Hygiene
+
+- Removed sensitive files from version control:
+  - `emails.json`
+  - `policies.txt`
+- Updated `.gitignore` accordingly
+
+---
+
+### 🧭 Next Steps
+
+- Improve policy structure with:
+  - violation indicators
+  - heuristic rules
+- Move email storage to Postgres
+- Store scan results (violations) in DB
+- Add batch scan API
+- Build compliance dashboard (risk view)
+- Add retry + fallback for reranker
+- Introduce evaluation (RAGAS / custom metrics)
+
+---
+
+### 💡 Key Learning
+
+This system evolved from:
+- basic RAG QA → to
+- hybrid retrieval → to
+- agent + MCP tool system → to
+- **policy-driven compliance detection engine**
+
+This significantly improves real-world applicability and system design depth.
+
+## 📌 Session Update: Compliance Scan Pipeline
+
+### ✅ What was built
+
+- Implemented **email compliance scanning pipeline**
+  - Emails stored in Postgres
+  - Policies stored in Qdrant
+  - RAG used for policy-aware reasoning
+
+- Added new API:
+  - `POST /scan-email?email_id=...`
+
+- Integrated **hybrid retrieval**
+  - Vector search (Qdrant)
+  - BM25 keyword search
+  - Merged + reranked results
+
+- Added **MCP tool**
+  - Tool: `compliance_scan`
+  - Enables agent/tool-based execution via MCP server
+
+- Wired into **LangGraph agent**
+  - Enables orchestration across tools (RAG + compliance)
+
+---
+
+### 🧠 Key Learnings
+
+- RAG should act as a **reasoning layer**, not just retrieval
+- Prompt quality directly impacts risk detection accuracy
+- BM25 significantly improves recall for keyword-heavy policies
+- Reranker improves precision after hybrid retrieval
+- Caching can hide prompt improvements → must invalidate during testing
+- MCP tools require decorator-based registration (not function calls)
+
+---
+
+### ⚠️ Issues Faced
+
+- Reranker startup delay caused initial connection failures
+- Incorrect tool registration (`register_tool` usage mismatch)
+- Import path issues inside Docker (`app` module not found)
+- Prompt bug (`context` undefined) caused runtime failure
+- Cache returning stale responses during prompt iteration
+
+---
+
+### 🚀 Next Steps
+
+- Add **batch email scanning** (multiple emails → risk report)
+- Introduce **confidence scores** in output
+- Normalize structured JSON output (avoid truncation issues)
+- Expand policy definitions with:
+  - keyword patterns
+  - proximity rules
+  - heuristic signals
+- Build **dashboard-style output** (risk summary, counts by category)
+
+---
