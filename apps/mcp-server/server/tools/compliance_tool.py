@@ -13,7 +13,7 @@ def compliance_scan(input: dict):
         res = requests.post(
             "http://api:8000/scan-email",
             params={"email_id": email_id},
-            timeout=30
+            timeout=300
         )
         return res.json()
     except Exception as e:
