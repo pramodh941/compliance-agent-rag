@@ -6,6 +6,8 @@ from .tools import rag_tool as _
 from .tools import compliance_tool as _
 from fastapi import Depends, Header, HTTPException
 import os
+from .observability import tracer
+import json
 
 API_KEY = os.getenv("MCP_API_KEY")
 if not API_KEY:
@@ -24,13 +26,17 @@ def verify_api_key(x_api_key: str = Header(None)):
 
 @app.post("/execute")
 def execute_tool(req: ToolRequest, _: str = Depends(verify_api_key)):
-    tool_fn = get_tool(req.tool)
+    with tracer.start_as_current_span("execute_tool") as span:
+        span.set_attribute("tool_name", req.tool)
+        span.set_attribute("input.email_id", req.input.get("email_id", ""))
+        tool_fn = get_tool(req.tool)
 
-    if not tool_fn:
-        return {"error": f"Tool '{req.tool}' not found"}
+        if not tool_fn:
+            return {"error": f"Tool '{req.tool}' not found"}
 
-    result = tool_fn(req.input)
-    return result
+        result = tool_fn(req.input)
+        span.set_attribute("tool_result", json.dumps(result)[:500])  # Log first 500 chars of result
+        return result
 
 
 @app.get("/health")
