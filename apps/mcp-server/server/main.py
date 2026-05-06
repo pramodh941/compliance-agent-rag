@@ -27,3 +27,32 @@ def execute_tool(req: ToolRequest):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.get("/tools")
+def list_tools():
+    return {
+        "tools": [
+            {
+                "name": "rag_search",
+                "description": "Answer questions using RAG",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"}
+                    },
+                    "required": ["query"]
+                }
+            },
+            {
+                "name": "compliance_scan",
+                "description": "Scan email for policy violations",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "email_id": {"type": "string"}
+                    },
+                    "required": ["email_id"]
+                }
+            }
+        ]
+    }
