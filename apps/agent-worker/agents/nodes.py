@@ -49,6 +49,10 @@ def planner_node(state):
 def tool_executor_node(state):
     if state["selected_tool"] == "final_answer":
 
+        state["final_response"] = state["tool_args"]
+
+        state["should_continue"] = False
+
         return state
 
     tool = state["selected_tool"]
@@ -81,29 +85,44 @@ def tool_executor_node(state):
 
 def reflection_node(state):
 
-    # Stop if enough information gathered
-    if should_stop(state):
+    tool_result = state.get("tool_result")
 
-        latest = state["observations"][-1]
+    selected_tool = state.get("selected_tool")
 
-        state["final_response"] = latest.get("result")
+    observations = state.get("observations", [])
 
-        state["should_continue"] = False
-
-        return state
-
-    # Stop if agent is looping
-    if detect_repeated_tool_use(state):
-
-        state["final_response"] = {
-            "message": "Stopping due to repeated tool usage."
-        }
+    # stop immediately for final answers
+    if selected_tool == "final_answer":
 
         state["should_continue"] = False
 
         return state
 
-    # Otherwise continue planning
+    # stop if tool produced useful output
+    if tool_result:
+
+        state["final_response"] = tool_result
+
+        state["should_continue"] = False
+
+        return state
+
+    # stop repeated tool loops
+    if len(observations) >= 2:
+
+        last_tool = observations[-1]["tool"]
+        prev_tool = observations[-2]["tool"]
+
+        if last_tool == prev_tool:
+
+            state["final_response"] = {
+                "message": "Stopping due to repeated tool usage."
+            }
+
+            state["should_continue"] = False
+
+            return state
+
     state["should_continue"] = True
 
     return state

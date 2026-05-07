@@ -1,101 +1,70 @@
 import json
+import re
 import requests
-from agents.parser import extract_json
+
+from agents.schemas import PlannerResponse
+from app.config import settings
+from agents.router import route_intent
 
 
-OLLAMA_URL = "http://ollama:11434/api/chat"
+OLLAMA_URL = f"{settings.OLLAMA_BASE_URL}/api/chat"
 
 
 SYSTEM_PROMPT = """
-You are an autonomous AI compliance agent.
+You are an AI compliance agent planner.
 
-Your role is to decide the NEXT BEST ACTION.
+You MUST respond ONLY with valid JSON.
 
-You operate in a reasoning loop:
+DO NOT explain your reasoning.
 
-plan
-→ tool execution
-→ observation
-→ reflection
-→ next decision
+DO NOT use markdown.
 
-AVAILABLE TOOLS
+DO NOT use code fences.
+
+Available tools:
 
 1. ping
 - health check tool
-- use only for connectivity/system checks
 
 Arguments:
 {}
-
---------------------------------------------------
 
 2. rag_search
 - use for policy lookup
 - use for compliance guidance
 - use for document retrieval
-- use when the user asks about rules, regulations, or policies
 
 Arguments:
 {
   "query": "string"
 }
 
---------------------------------------------------
-
 3. analyze_text
 - use for risk analysis
 - use for suspicious text detection
-- use for analyzing raw text content
 
 Arguments:
 {
   "text": "string"
 }
 
---------------------------------------------------
-
 4. compliance_scan
 - use for scanning emails/documents
-- use for compliance risk detection
 
 Arguments:
 {
   "email_id": "string"
 }
 
---------------------------------------------------
+5. final_answer
+- use when enough information exists
 
-IMPORTANT BEHAVIOR RULES
-
-1. DO NOT repeatedly call the same tool if the previous result was already useful
-
-2. If previous observations already answer the user request,
-respond with:
-
+Arguments:
 {
-  "tool": "final_answer",
-  "arguments": {
-    "answer": "..."
-  }
+  "answer": "string"
 }
 
-3. Prefer:
-- rag_search → policy/rule questions
-- compliance_scan → compliance investigation
-- analyze_text → raw text analysis
-
-4. Avoid unnecessary retries
-
-5. Think step-by-step before selecting a tool
-
-6. ONLY return valid JSON
-
-7. NEVER explain your reasoning outside JSON
-
---------------------------------------------------
-
-EXAMPLE
+Example response:
 
 {
   "tool": "rag_search",
@@ -106,6 +75,16 @@ EXAMPLE
 """
 
 
+def extract_json(raw_text: str):
+
+    match = re.search(r"\{.*\}", raw_text, re.DOTALL)
+
+    if not match:
+        raise ValueError("No JSON object found")
+
+    return match.group(0)
+
+
 def generate_plan(user_input: str, observations=None):
 
     observation_text = ""
@@ -113,33 +92,39 @@ def generate_plan(user_input: str, observations=None):
     if observations:
 
         observation_text = f"""
-    Previous observations:
-    {json.dumps(observations, indent=2)}
-    """
+Previous observations:
+{json.dumps(observations, indent=2)}
+"""
 
     user_prompt = f"""
-    User request:
-    {user_input}
+User request:
+{user_input}
 
-    {observation_text}
+{observation_text}
 
-    Choose the NEXT best tool.
+Choose the NEXT BEST TOOL.
 
-    If enough information has been gathered,
-    respond with:
+If enough information exists,
+return:
 
-    {{
-    "tool": "final_answer",
-    "arguments": {{
-        "answer": "..."
-    }}
-    }}
+{{
+  "tool": "final_answer",
+  "arguments": {{
+    "answer": "..."
+  }}
+}}
 
-    Return ONLY valid JSON.
-    """
+Return ONLY JSON.
+"""
+    routed = route_intent(user_input)
+
+    if routed:
+        print("ROUTER MATCHED:")
+        print(routed)
+        return routed
 
     payload = {
-        "model": "gemma:2b",
+        "model": settings.PLANNER_MODEL,
         "messages": [
             {
                 "role": "system",
@@ -158,7 +143,7 @@ def generate_plan(user_input: str, observations=None):
         response = requests.post(
             OLLAMA_URL,
             json=payload,
-            timeout=300,
+            timeout=settings.PLANNER_TIMEOUT,
         )
 
         response.raise_for_status()
@@ -170,22 +155,21 @@ def generate_plan(user_input: str, observations=None):
         print("RAW LLM OUTPUT:")
         print(raw_output)
 
-        parsed = extract_json(raw_output)
-        
-        print("PARSED PLAN:")
-        print(parsed)
+        cleaned_json = extract_json(raw_output)
 
-        return parsed
+        parsed_dict = json.loads(cleaned_json)
+
+        validated = PlannerResponse(**parsed_dict)
+
+        return validated.model_dump()
 
     except Exception as e:
 
-      print("PLANNER ERROR:")
-      print(str(e))
+        print("PLANNER ERROR:")
+        print(str(e))
 
-      return {
-          "tool": "final_answer",
-          "arguments": {
-              "answer": "Planner failed to generate valid tool selection."
-          },
-          "error": str(e),
-      }
+        return {
+            "tool": "ping",
+            "arguments": {},
+            "error": str(e),
+        }

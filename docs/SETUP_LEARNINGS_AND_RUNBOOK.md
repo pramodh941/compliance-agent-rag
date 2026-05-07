@@ -757,3 +757,101 @@ Observed:
 Mitigation:
 - increased planner timeout to 300 seconds
 - lightweight planner models preferred for local testing
+
+# 🚀 Agent Runtime Stabilization (LangGraph Loop Controls)
+
+## ✅ Major Runtime Improvements
+
+The agent runtime was stabilized to reduce hallucinations, infinite loops, and excessive planner calls.
+
+---
+
+## 🧠 Hybrid Routing Architecture
+
+The system now uses:
+
+Deterministic Router
+→ Agent Planner (fallback only)
+→ Tool Execution
+→ Reflection
+→ Conditional Continuation
+
+Instead of routing every request through the LLM planner.
+
+---
+
+## ✅ Deterministic Intent Routing Added
+
+Simple requests now bypass the planner entirely:
+
+| Query Type | Route |
+|---|---|
+| policy lookup | rag_search |
+| compliance scan | compliance_scan |
+| suspicious/risk analysis | analyze_text |
+| greetings | direct final_answer |
+
+### Benefits
+- lower latency
+- reduced hallucinations
+- fewer Ollama calls
+- improved runtime predictability
+
+---
+
+## 🔴 Issue Fixed: Infinite LangGraph Recursion
+
+### Symptoms
+
+```text
+GraphRecursionError
+Recursion limit reached
+
+Root Cause
+
+final_answer responses were not treated as terminal states.
+
+The graph continued cycling:
+
+planner
+→ tool_executor
+→ reflection
+→ planner
+
+indefinitely.
+
+Fix
+
+Added:
+
+explicit END conditions
+terminal state handling
+reflection-based stop logic
+✅ Reflection Loop Improvements
+
+Reflection node now:
+
+stops on successful tool output
+terminates on final_answer
+detects repeated tool loops
+prevents unnecessary replanning
+📈 Result
+
+The runtime behavior is now significantly more stable:
+
+Area	Status
+planner spam	reduced
+infinite loops	fixed
+repeated tool execution	fixed
+greeting recursion	fixed
+latency	improved
+🧠 Key Learning
+
+Production-grade agents should NOT rely entirely on autonomous LLM reasoning.
+
+A hybrid approach works far better:
+
+deterministic routing for obvious intents
+LLM orchestration for ambiguous tasks
+strict loop controls
+reflection-based termination

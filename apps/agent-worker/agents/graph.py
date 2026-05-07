@@ -8,7 +8,6 @@ from agents.nodes import (
     reflection_node,
 )
 
-
 builder = StateGraph(AgentState)
 
 builder.add_node("planner", planner_node)
@@ -26,10 +25,15 @@ builder.add_edge("tool_executor", "reflection")
 
 def should_continue(state):
 
-    if state["should_continue"]:
-        return "planner"
+    selected_tool = state.get("selected_tool")
 
-    return END
+    if selected_tool == "final_answer":
+        return END
+
+    if not state.get("should_continue", True):
+        return END
+
+    return "planner"
 
 
 builder.add_conditional_edges(

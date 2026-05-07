@@ -1,4 +1,5 @@
 from typing import TypedDict, List, Dict, Any
+from app.config import settings
 
 
 class AgentState(TypedDict):
@@ -19,7 +20,7 @@ class AgentState(TypedDict):
 
     iteration_count: int
 
-    max_iterations: int
+    max_iterations: settings.MAX_ITERATIONS
 
     final_response: Any
 
