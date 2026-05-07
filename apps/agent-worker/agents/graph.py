@@ -1,38 +1,44 @@
 from langgraph.graph import StateGraph, END
-from app.agent.state import AgentState
-from app.agent.nodes import (
-    classify_node,
-    extract_email_node,
-    compliance_node,
-    rag_node
+
+from agents.state import AgentState
+
+from agents.nodes import (
+    planner_node,
+    tool_executor_node,
+    reflection_node,
 )
 
 
-def route(state):
-    return state["intent"]
+builder = StateGraph(AgentState)
+
+builder.add_node("planner", planner_node)
+
+builder.add_node("tool_executor", tool_executor_node)
+
+builder.add_node("reflection", reflection_node)
+
+builder.set_entry_point("planner")
+
+builder.add_edge("planner", "tool_executor")
+
+builder.add_edge("tool_executor", "reflection")
 
 
-def build_graph():
-    g = StateGraph(AgentState)
+def should_continue(state):
 
-    g.add_node("classify", classify_node)
-    g.add_node("extract_email", extract_email_node)
-    g.add_node("compliance", compliance_node)
-    g.add_node("rag", rag_node)
+    if state["should_continue"]:
+        return "planner"
 
-    g.set_entry_point("classify")
+    return END
 
-    g.add_conditional_edges(
-        "classify",
-        route,
-        {
-            "scan": "extract_email",
-            "qa": "rag"
-        }
-    )
 
-    g.add_edge("extract_email", "compliance")
-    g.add_edge("compliance", END)
-    g.add_edge("rag", END)
+builder.add_conditional_edges(
+    "reflection",
+    should_continue,
+    {
+        "planner": "planner",
+        END: END,
+    }
+)
 
-    return g.compile()
+graph = builder.compile()

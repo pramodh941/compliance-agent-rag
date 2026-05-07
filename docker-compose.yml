@@ -22,7 +22,7 @@ services:
     env_file:
       - apps/mcp-server/.env
     volumes:
-      - ./apps/mcp-server/server:/app/server
+      - ./apps/mcp-server:/app
     depends_on:
       - api
 
@@ -75,6 +75,18 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  agent-worker:
+    build:
+      context: apps/agent-worker
+      dockerfile: Dockerfile
+    container_name: agent-worker
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./apps/agent-worker:/app
+    depends_on:
+      - mcp-server
 
 volumes:
   pgdata:
