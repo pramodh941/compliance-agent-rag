@@ -855,3 +855,260 @@ deterministic routing for obvious intents
 LLM orchestration for ambiguous tasks
 strict loop controls
 reflection-based termination
+
+
+🧠 Session Update: Stateful Agent Memory + Runtime Stabilization
+✅ Major Architectural Milestone
+
+The agent runtime evolved from:
+
+stateless request routing
+
+to:
+
+stateful agent orchestration
+
+The system now maintains session-scoped conversational memory across agent executions.
+
+🚀 What Was Implemented
+1. Session-Based Memory Layer
+
+Added lightweight in-memory session persistence:
+
+File added:
+
+agents/memory.py
+
+Capabilities:
+
+store conversation history
+retrieve prior interactions
+persist responses across requests
+clear session memory
+
+Current implementation uses:
+
+in-memory Python dictionary
+
+Design intentionally kept simple for future migration to:
+
+Redis
+Postgres
+Vector memory
+Cloud memory services
+2. Conversation History in Agent State
+
+AgentState expanded to include:
+
+session_id
+conversation_history
+
+This enables:
+
+stateful orchestration
+multi-turn workflows
+conversational continuity
+context-aware planning
+3. Memory Injection into Planner
+
+Planner now receives:
+
+prior user requests
+prior agent responses
+previous workflow context
+
+through:
+
+conversation_history
+
+Injected into planner prompt dynamically.
+
+4. Structured Planner Validation Improvements
+
+Planner outputs now validated using Pydantic:
+
+PlannerResponse
+
+Added:
+
+strict tool name validation via Literal
+structured argument enforcement
+
+This prevents:
+
+hallucinated tool execution
+invalid planner outputs
+unsafe orchestration behavior
+5. Safe Planner Failure Handling
+
+Previous behavior:
+
+planner failure → ping tool fallback
+
+New behavior:
+
+planner failure → safe final_answer termination
+
+This is important for:
+
+governance
+auditability
+enterprise safety controls
+6. LangGraph Runtime Stabilization
+
+Fixed several orchestration issues:
+
+Infinite recursion bug
+
+Cause:
+
+graph lacked proper stop condition handling for final_answer
+
+Fix:
+
+explicit graph termination logic
+conditional edge stabilization
+Repeated tool execution loops
+
+Cause:
+
+planner repeatedly selecting same tool
+
+Fix:
+
+reflection-based repeated-tool detection
+Excessive LLM calls
+
+Cause:
+
+greetings/simple requests unnecessarily routed through planner LLM
+
+Fix:
+
+deterministic router fast-path
+
+Examples:
+
+greetings
+simple policy lookups
+direct analysis requests
+🧪 Memory Validation Test
+
+Validated session continuity using:
+
+Request 1
+find insider trading policy
+Request 2
+summarize it
+
+Observed:
+
+conversation history persisted correctly
+planner received previous interaction context
+
+Limitation:
+
+lightweight model (gemma:2b) still weak at conversational inference
+
+Important distinction:
+
+Memory architecture works correctly.
+Reasoning quality remains model-limited.
+🏗️ Current Runtime Architecture
+User Request
+    ↓
+Session Memory Load
+    ↓
+Deterministic Router
+    ↓
+Planner
+    ↓
+Tool Validation
+    ↓
+MCP Tool Execution
+    ↓
+Reflection Layer
+    ↓
+Memory Persistence
+    ↓
+Final Response
+🔍 Key Learnings
+Stateful orchestration is foundational
+
+Memory transforms the system from:
+
+stateless API orchestration
+
+to:
+
+conversational agent runtime
+Deterministic routing is critical
+
+Fast-path routing:
+
+reduces latency
+avoids unnecessary LLM calls
+improves stability
+lowers compute cost
+
+Production systems heavily rely on hybrid:
+
+deterministic routing
+agentic reasoning
+Lightweight local models have orchestration limits
+
+gemma:2b works for:
+
+tool routing
+simple orchestration
+
+But struggles with:
+
+semantic continuation
+conversational inference
+multi-step reasoning
+
+Architecture remains correct despite model limitations.
+
+⚠️ Current Limitations
+Memory is in-process only
+resets on container restart
+No semantic memory retrieval yet
+No long-term memory storage
+No summarization/compression layer
+Planner still lacks confidence scoring
+Reflection remains heuristic-based
+🚀 Recommended Next Steps
+Near-term
+structured tool metadata registry
+memory-aware routing
+reflection scoring
+response confidence estimation
+Mid-term
+Redis-backed memory
+semantic memory retrieval
+RAGAS evaluation
+observability/tracing
+Long-term
+multi-agent orchestration
+human approval workflows
+cloud-native deployment
+managed MCP integration
+long-term vector memory
+💡 Important Architectural Insight
+
+The project has now evolved through several stages:
+
+Basic RAG QA
+    ↓
+Hybrid Retrieval
+    ↓
+Compliance Detection
+    ↓
+MCP Tool System
+    ↓
+LangGraph Agent Runtime
+    ↓
+Stateful Agent Orchestration
+
+This is now approaching the architecture style used in production-grade AI agent platforms.

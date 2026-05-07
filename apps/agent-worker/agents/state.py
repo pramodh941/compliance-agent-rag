@@ -27,3 +27,7 @@ class AgentState(TypedDict):
     should_continue: bool
 
     errors: List[str]
+
+    conversation_history: list
+    
+    session_id: str

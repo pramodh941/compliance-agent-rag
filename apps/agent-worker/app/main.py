@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from agents.graph import graph
+from agents.memory import get_memory, save_memory
 
 
 app = FastAPI()
@@ -10,6 +11,7 @@ app = FastAPI()
 
 class RunRequest(BaseModel):
     input: str
+    session_id: str = "default"
 
 
 @app.get("/health")
@@ -22,8 +24,15 @@ def health():
 @app.post("/run")
 def run_agent(request: RunRequest):
 
+    memory = get_memory(request.session_id)
+
     initial_state = {
+
         "user_input": request.input,
+
+        "session_id": request.session_id,
+
+        "conversation_history": memory,
 
         "messages": [],
 
@@ -47,6 +56,14 @@ def run_agent(request: RunRequest):
     }
 
     result = graph.invoke(initial_state)
+
+    save_memory(
+        request.session_id,
+        {
+            "user": request.input,
+            "response": result.get("final_response"),
+        }
+    )
 
     return {
         "result": result

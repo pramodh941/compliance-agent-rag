@@ -6,8 +6,9 @@ from agents.reflection import should_stop, detect_repeated_tool_use
 def planner_node(state):
 
     plan = generate_plan(
-        state["user_input"],
-        state.get("observations", [])
+        user_input=state["user_input"],
+        observations=state.get("observations", []),
+        conversation_history=state.get("conversation_history", []),
     )
 
     validation = validate_plan(plan)

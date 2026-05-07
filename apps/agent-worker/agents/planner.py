@@ -85,7 +85,16 @@ def extract_json(raw_text: str):
     return match.group(0)
 
 
-def generate_plan(user_input: str, observations=None):
+def generate_plan(user_input: str, observations=None, conversation_history=None):
+
+    memory_text = ""
+
+    if conversation_history:
+
+        memory_text = f"""
+    Conversation history:
+    {json.dumps(conversation_history, indent=2)}
+    """
 
     observation_text = ""
 
@@ -97,6 +106,8 @@ Previous observations:
 """
 
     user_prompt = f"""
+Conversation history:
+{memory_text}
 User request:
 {user_input}
 
@@ -169,7 +180,9 @@ Return ONLY JSON.
         print(str(e))
 
         return {
-            "tool": "ping",
-            "arguments": {},
+            "tool": "final_answer",
+            "arguments": {
+                "answer": "Planner failed to generate a valid execution plan."
+            },
             "error": str(e),
         }
