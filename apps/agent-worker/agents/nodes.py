@@ -1,6 +1,7 @@
 from agents.mcp_client import call_mcp_tool
 from agents.planner import generate_plan
 from agents.validator import validate_plan
+from agents.reflection import should_stop, detect_repeated_tool_use
 
 def planner_node(state):
 
@@ -80,15 +81,29 @@ def tool_executor_node(state):
 
 def reflection_node(state):
 
-    iteration = state["iteration_count"] + 1
+    # Stop if enough information gathered
+    if should_stop(state):
 
-    should_continue = state["should_continue"]
+        latest = state["observations"][-1]
 
-    if iteration >= state["max_iterations"]:
-        should_continue = False
+        state["final_response"] = latest.get("result")
 
-    return {
-        **state,
-        "iteration_count": iteration,
-        "should_continue": should_continue,
-    }
+        state["should_continue"] = False
+
+        return state
+
+    # Stop if agent is looping
+    if detect_repeated_tool_use(state):
+
+        state["final_response"] = {
+            "message": "Stopping due to repeated tool usage."
+        }
+
+        state["should_continue"] = False
+
+        return state
+
+    # Otherwise continue planning
+    state["should_continue"] = True
+
+    return state

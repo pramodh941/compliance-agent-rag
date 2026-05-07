@@ -1,50 +1,101 @@
 import json
 import requests
+from agents.parser import extract_json
 
 
 OLLAMA_URL = "http://ollama:11434/api/chat"
 
 
 SYSTEM_PROMPT = """
-You are an AI compliance agent planner.
+You are an autonomous AI compliance agent.
 
-Your task is to decide which MCP tool should be used.
+Your role is to decide the NEXT BEST ACTION.
 
-Available tools:
+You operate in a reasoning loop:
+
+plan
+→ tool execution
+→ observation
+→ reflection
+→ next decision
+
+AVAILABLE TOOLS
 
 1. ping
 - health check tool
+- use only for connectivity/system checks
+
+Arguments:
+{}
+
+--------------------------------------------------
 
 2. rag_search
 - use for policy lookup
 - use for compliance guidance
 - use for document retrieval
+- use when the user asks about rules, regulations, or policies
 
 Arguments:
 {
   "query": "string"
 }
 
+--------------------------------------------------
+
 3. analyze_text
 - use for risk analysis
 - use for suspicious text detection
+- use for analyzing raw text content
 
 Arguments:
 {
   "text": "string"
 }
 
+--------------------------------------------------
+
 4. compliance_scan
 - use for scanning emails/documents
+- use for compliance risk detection
 
 Arguments:
 {
   "email_id": "string"
 }
 
-You MUST respond ONLY valid JSON.
+--------------------------------------------------
 
-Example:
+IMPORTANT BEHAVIOR RULES
+
+1. DO NOT repeatedly call the same tool if the previous result was already useful
+
+2. If previous observations already answer the user request,
+respond with:
+
+{
+  "tool": "final_answer",
+  "arguments": {
+    "answer": "..."
+  }
+}
+
+3. Prefer:
+- rag_search → policy/rule questions
+- compliance_scan → compliance investigation
+- analyze_text → raw text analysis
+
+4. Avoid unnecessary retries
+
+5. Think step-by-step before selecting a tool
+
+6. ONLY return valid JSON
+
+7. NEVER explain your reasoning outside JSON
+
+--------------------------------------------------
+
+EXAMPLE
 
 {
   "tool": "rag_search",
@@ -107,7 +158,7 @@ def generate_plan(user_input: str, observations=None):
         response = requests.post(
             OLLAMA_URL,
             json=payload,
-            timeout=120,
+            timeout=300,
         )
 
         response.raise_for_status()
@@ -119,14 +170,22 @@ def generate_plan(user_input: str, observations=None):
         print("RAW LLM OUTPUT:")
         print(raw_output)
 
-        parsed = json.loads(raw_output)
+        parsed = extract_json(raw_output)
+        
+        print("PARSED PLAN:")
+        print(parsed)
 
         return parsed
 
     except Exception as e:
 
-        return {
-            "tool": "ping",
-            "arguments": {},
-            "error": str(e),
-        }
+      print("PLANNER ERROR:")
+      print(str(e))
+
+      return {
+          "tool": "final_answer",
+          "arguments": {
+              "answer": "Planner failed to generate valid tool selection."
+          },
+          "error": str(e),
+      }

@@ -678,3 +678,82 @@ agentic AI infrastructure
 rather than a simple RAG application.
 
 ---
+
+# Autonomous Runtime Reliability Improvements
+
+## Added Reflection Layer
+
+The agent now includes:
+
+- reflection node
+- repeated tool detection
+- termination heuristics
+- observation-aware continuation
+
+Purpose:
+
+Prevent:
+- infinite loops
+- repeated tool execution
+- uncontrolled planning cycles
+
+---
+
+## Added Structured Output Parser
+
+LLM outputs are unreliable and may include:
+
+- markdown
+- prose
+- fenced JSON
+- partial formatting
+
+A robust parser was added to:
+
+- extract JSON safely
+- recover malformed responses
+- support markdown-wrapped JSON
+
+Key learning:
+
+LLMs are probabilistic text generators, not guaranteed protocol generators.
+
+Production agent systems require:
+
+- parsers
+- validators
+- retries
+- schema enforcement
+- repair logic
+
+---
+
+## Planner Quality Observation
+
+`gemma:2b` works for lightweight orchestration but has limitations:
+
+- weak tool discrimination
+- weak stopping behavior
+- inconsistent instruction following
+
+Observed examples:
+
+- policy lookup routed incorrectly to `compliance_scan`
+- verbose/non-JSON responses
+- repeated tool preference
+
+This is primarily a planner-model limitation rather than a runtime architecture issue.
+
+---
+
+## CPU Runtime Observation
+
+Planner requests may timeout on CPU-only setups.
+
+Observed:
+- first model load extremely slow
+- long LangGraph loops amplify latency
+
+Mitigation:
+- increased planner timeout to 300 seconds
+- lightweight planner models preferred for local testing
