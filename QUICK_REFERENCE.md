@@ -1,74 +1,8 @@
-# Setup Learnings And Runbook
+# Compliance Agent RAG - Quick Reference
 
 Last updated: May 9, 2026
 
-## Overview
-
-This project runs a compliance-focused RAG agent stack with these services:
-
-- API service on `:8000`
-- MCP server on `:8001`
-- Agent worker on `:8002`
-- Postgres for emails, alerts, sessions, and audit logs
-- Qdrant for vector retrieval
-- Ollama for embeddings and generation
-- Reranker service for retrieved text ranking
-
-Validated flow:
-
-```text
-User request
--> API /agents/run
--> agent-worker
--> MCP rag_search
--> API /qa
--> Qdrant + reranker + Ollama
--> source-backed answer
--> persisted session history
-```
-
-## Important Learnings
-
-### Rebuild images after dependency changes
-
-Plain `docker compose up -d` can reuse stale images. If Python dependencies, Dockerfiles, or requirements files change, run:
-
-```bash
-docker compose up -d --build
-```
-
-### MCP must call API /qa with POST
-
-The API route is:
-
-```python
-@router.post("/qa")
-```
-
-So MCP `rag_search_tool()` must use `POST`, not `GET`.
-
-### Avoid blocking the API event loop
-
-The `/agents/run` endpoint calls blocking HTTP code through `requests`. It should remain a normal sync FastAPI route. If declared as `async def`, the API event loop can block while:
-
-```text
-API /agents/run
--> agent-worker
--> MCP
--> API /qa
-```
-
-That produces MCP/API timeouts.
-
-### First RAG calls can be slow
-
-The first `/qa` or `/agents/run` call can be slow because Ollama and the reranker may warm up models. Use realistic timeouts and rerun once after startup.
-
-### Sessions persist in Postgres
-
-Agent session memory is stored in the `sessions` table. Validate by running an agent request, restarting `agent-worker`, then reading the session again.
-
-## Start The Stack From WSL
+## Start From WSL
 
 ```bash
 cd /home/cadee/projects/compliance-agent-rag
@@ -77,8 +11,6 @@ docker compose down
 docker compose up -d --build
 docker compose ps
 ```
-
-Wait until core services are running and healthy.
 
 ## Health Checks
 
@@ -98,7 +30,7 @@ Expected:
 {"status":"healthy","agent_worker":"connected"}
 ```
 
-## Phase 1 Validation: Agent RAG Flow
+## Phase 1: Agent RAG Flow
 
 Direct API RAG:
 
@@ -124,12 +56,12 @@ curl -X POST http://localhost:8000/agents/run \
 
 Expected:
 
-- Response status is `success`.
-- Tool observations include `rag_search`.
+- Response has `status: success`.
+- `observations` includes `rag_search`.
 - Answer mentions material non-public information.
-- Sources include MNPI or personal trading policy context.
+- Sources include MNPI/personal trading policy context.
 
-## Phase 2 Validation: Persistence
+## Phase 2: Persistence
 
 Seed emails and alerts:
 
@@ -143,14 +75,14 @@ Expected:
 - `/ingest` returns `email_count: 25`.
 - `/alerts` returns persisted alert rows.
 
-Validate session persistence:
+Validate persisted session:
 
 ```bash
 curl http://localhost:8000/agents/sessions/manual-phase1
 curl http://localhost:8000/agents/sessions
 ```
 
-Restart agent worker:
+Restart worker and confirm the session remains:
 
 ```bash
 docker compose restart agent-worker
@@ -158,11 +90,7 @@ sleep 10
 curl http://localhost:8000/agents/sessions/manual-phase1
 ```
 
-Expected:
-
-- Previous conversation history is still present.
-
-## Phase 3 Validation: Reports
+## Phase 3: Reports
 
 ```bash
 curl "http://localhost:8000/reports/compliance-summary?limit=25"
@@ -218,7 +146,7 @@ curl -f http://localhost:8000/agents/sessions/smoke-test
 echo "All smoke tests passed"
 ```
 
-## Debugging Commands
+## Debugging
 
 ```bash
 docker compose ps
@@ -231,9 +159,34 @@ docker compose logs --tail 100 reranker
 docker compose logs --tail 100 ollama
 ```
 
-## Known Notes
+## Common Issues
 
-- First RAG calls may be slow because model services warm up.
-- Use `docker compose up -d --build` after dependency or Dockerfile changes.
-- API application logs are JSON-formatted; Uvicorn/dependency logs may still use their own formats.
-- Qdrant, Ollama, and Postgres data are stored in Docker volumes.
+### MCP or Agent Times Out
+
+First model calls can be slow. Re-run after warmup and inspect:
+
+```bash
+docker compose logs --tail 100 api
+docker compose logs --tail 100 mcp-server
+docker compose logs --tail 100 agent-worker
+```
+
+### Dependency Change Not Reflected
+
+Rebuild images:
+
+```bash
+docker compose up -d --build
+```
+
+### Session Missing
+
+Run an agent request first, then check the session:
+
+```bash
+curl -X POST http://localhost:8000/agents/run \
+  -H "Content-Type: application/json" \
+  -d '{"input":"What is the insider trading policy?","session_id":"debug-session"}'
+
+curl http://localhost:8000/agents/sessions/debug-session
+```

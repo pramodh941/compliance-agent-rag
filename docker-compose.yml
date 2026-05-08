@@ -6,11 +6,29 @@ services:
     container_name: compliance-api
     ports:
       - "8000:8000"
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_DB=compliance
+      - QDRANT_URL=http://qdrant:6333
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - AGENT_WORKER_URL=http://agent-worker:8002
+      - API_REQUEST_TIMEOUT=180
+      - AGENT_RUN_TIMEOUT=300
     volumes:
       - ./apps/api/app:/app/app
     depends_on:
       - postgres
       - qdrant
+      - ollama
+      - reranker
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   mcp-server:
     build:
@@ -21,10 +39,18 @@ services:
       - "8001:8001"
     env_file:
       - apps/mcp-server/.env
+    environment:
+      - API_BASE_URL=http://api:8000
+      - API_REQUEST_TIMEOUT=180
     volumes:
       - ./apps/mcp-server:/app
     depends_on:
       - api
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   postgres:
     image: postgres:16
@@ -37,6 +63,11 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d compliance"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   qdrant:
     image: qdrant/qdrant
@@ -83,10 +114,26 @@ services:
     container_name: agent-worker
     ports:
       - "8002:8002"
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_DB=compliance
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - MCP_BASE_URL=http://mcp-server:8001
+      - MCP_TIMEOUT=180
+      - PLANNER_TIMEOUT=180
     volumes:
       - ./apps/agent-worker:/app
     depends_on:
       - mcp-server
+      - postgres
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
 volumes:
   pgdata:

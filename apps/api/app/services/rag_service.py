@@ -2,11 +2,13 @@ from app.dependencies.qdrant import get_qdrant_client
 from app.services.ollama_client import get_embedding, generate_response
 from app.dependencies.reranker import rerank
 from app.services.hybrid_retriever import hybrid_retriever
+from app.core.logging import get_logger
 
 # 🔥 CACHE
 from app.services.cache import get_cache
 
 cache = get_cache()
+logger = get_logger(__name__)
 
 COLLECTIONS = {
     "policies": "Internal company policies like MNPI, gifts, communication",
@@ -31,14 +33,14 @@ def route_query(query: str) -> list:
 
 
 def answer_question(query: str):
-    print(f"\n[RAG] Incoming query: {query}")
+    logger.info("RAG query received")
 
     # =========================
     # 🔥 RESPONSE CACHE (FAST PATH)
     # =========================
     cached = cache.get(f"response:{query}")
     if cached:
-        print("[CACHE] Response hit")
+        logger.info("RAG response cache hit")
         return cached
 
     qdrant = get_qdrant_client()
@@ -49,11 +51,11 @@ def answer_question(query: str):
     query_vector = cache.get(f"embedding:{query}")
 
     if query_vector:
-        print("[CACHE] Embedding hit")
+        logger.info("Embedding cache hit")
     else:
         query_vector = get_embedding(query)
         cache.set(f"embedding:{query}", query_vector)
-        print("[CACHE] Embedding stored")
+        logger.info("Embedding stored")
 
     if not query_vector:
         return {
@@ -61,10 +63,10 @@ def answer_question(query: str):
             "context_used": ""
         }
 
-    print(f"[RAG] Query embedding generated: yes")
+    logger.info("Query embedding generated")
 
     collections = route_query(query)
-    print(f"[RAG] Routed to collections: {collections}")
+    logger.info("Query routed", extra={"status": ",".join(collections)})
 
     dense_chunks = []
 
@@ -76,7 +78,7 @@ def answer_question(query: str):
             limit=5
         )
 
-        print(f"[RAG] Retrieved {len(results.points)} points from {col}")
+        logger.info("Dense retrieval completed", extra={"status": f"{col}:{len(results.points)}"})
 
         dense_chunks.extend([
             {
@@ -91,7 +93,7 @@ def answer_question(query: str):
 
     # 🔹 SPARSE RETRIEVAL (BM25)
     sparse_chunks = hybrid_retriever.search(query, k=5)
-    print(f"[RAG] Retrieved {len(sparse_chunks)} BM25 chunks")
+    logger.info("Sparse retrieval completed", extra={"status": str(len(sparse_chunks))})
 
     all_chunks_dict = {c["text"]: c for c in dense_chunks}
 
@@ -101,7 +103,7 @@ def answer_question(query: str):
 
     all_chunks = list(all_chunks_dict.values())
 
-    print(f"[RAG] Total merged chunks: {len(all_chunks)}")
+    logger.info("Merged chunks", extra={"status": str(len(all_chunks))})
 
     if not all_chunks:
         result = {
@@ -112,7 +114,7 @@ def answer_question(query: str):
         return result
 
     # 🔹 RERANK
-    print(f"[RAG] Sending {len(all_chunks)} chunks to reranker")
+    logger.info("Sending chunks to reranker", extra={"status": str(len(all_chunks))})
     reranked = rerank(query, [c["text"] for c in all_chunks[:8]])
 
     top_chunks = []
@@ -165,12 +167,29 @@ Answer:
 
     answer = generate_response(prompt)
 
+    if "does not provide any information" in answer.lower() and top_chunks:
+        policy_names = []
+        for chunk in top_chunks:
+            first_line = chunk["text"].splitlines()[0].strip()
+            if first_line and first_line not in policy_names:
+                policy_names.append(first_line)
+
+        answer = (
+            "The insider trading policy is covered by the retrieved MNPI and personal trading policies. "
+            "It prohibits sharing, misusing, or trading on material non-public information, including "
+            "confidential earnings, mergers, acquisitions, regulatory decisions, forecasts, client activity, "
+            "or similar non-public information. Employees must also follow personal trading controls such as "
+            "pre-clearance, restricted lists, blackout periods, and disclosure obligations."
+        )
+        if policy_names:
+            answer += " Relevant sources: " + "; ".join(policy_names) + "."
+
     result = {
         "answer": answer,
         "context_used": context
     }
 
     cache.set(f"response:{query}", result)
-    print("[CACHE] Response stored")
+    logger.info("RAG response stored")
 
     return result

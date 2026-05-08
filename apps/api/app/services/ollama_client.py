@@ -1,6 +1,10 @@
 import requests
 
-OLLAMA_URL = "http://ollama:11434"
+from app.core.config import settings
+from app.core.logging import get_logger
+
+OLLAMA_URL = settings.OLLAMA_BASE_URL
+logger = get_logger(__name__)
 
 def get_embedding(text: str):
     if not text or not text.strip():
@@ -11,10 +15,10 @@ def get_embedding(text: str):
         response = requests.post(
             f"{OLLAMA_URL}/api/embed",
             json={
-                "model": "nomic-embed-text",
+                "model": settings.EMBEDDING_MODEL,
                 "input": [text[:MAX_CHARS]]  # 🔥 MUST be list
             },
-                timeout=30
+                timeout=settings.API_REQUEST_TIMEOUT
         )
         response.raise_for_status()
 
@@ -26,14 +30,14 @@ def get_embedding(text: str):
         return data["embeddings"][0]
 
     except Exception as e:
-        print(f"[embedding error] {e}")
+        logger.warning("Embedding generation failed: %s", e)
         return None
 
 def generate_response(prompt: str):
     response = requests.post(
         f"{OLLAMA_URL}/api/generate",
         json={
-            "model": "gemma:2b",
+            "model": settings.PLANNER_MODEL,
             "prompt": prompt,
             "stream": False,
             "options": {
@@ -43,7 +47,7 @@ def generate_response(prompt: str):
                 "num_ctx": 2048
             }
         },
-        timeout=480
+        timeout=max(settings.API_REQUEST_TIMEOUT, 480)
     )
     response.raise_for_status()
     return response.json()["response"]

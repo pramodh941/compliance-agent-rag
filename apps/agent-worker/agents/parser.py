@@ -1,35 +1,9 @@
-import json
-import re
+"""
+JSON parsing utilities for agent output.
 
+Handles extraction of JSON from LLM responses.
+"""
 
-def extract_json(text: str):
+from agents.utils import extract_json
 
-    """
-    Extract JSON object from messy LLM output.
-    """
-
-    # Remove markdown fences
-    text = text.strip()
-
-    text = text.replace("```json", "")
-    text = text.replace("```", "")
-
-    # Try direct parse first
-    try:
-        return json.loads(text)
-    except:
-        pass
-
-    # Try extracting first JSON object
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-
-    if match:
-
-        json_text = match.group(0)
-
-        try:
-            return json.loads(json_text)
-        except:
-            pass
-
-    raise ValueError("Could not extract valid JSON")
+__all__ = ["extract_json"]

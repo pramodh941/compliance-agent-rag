@@ -49,5 +49,12 @@ class Settings:
         "http://mcp-server:8001"
     )
 
+    MCP_TIMEOUT = int(
+        os.getenv(
+            "MCP_TIMEOUT",
+            "180"
+        )
+    )
+
 
 settings = Settings()

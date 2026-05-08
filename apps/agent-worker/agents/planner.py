@@ -5,6 +5,7 @@ import requests
 from agents.schemas import PlannerResponse
 from app.config import settings
 from agents.router import route_intent
+from agents.utils import extract_json
 
 
 OLLAMA_URL = f"{settings.OLLAMA_BASE_URL}/api/chat"
@@ -73,16 +74,6 @@ Example response:
   }
 }
 """
-
-
-def extract_json(raw_text: str):
-
-    match = re.search(r"\{.*\}", raw_text, re.DOTALL)
-
-    if not match:
-        raise ValueError("No JSON object found")
-
-    return match.group(0)
 
 
 def generate_plan(user_input: str, observations=None, conversation_history=None):

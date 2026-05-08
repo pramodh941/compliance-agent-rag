@@ -1,10 +1,17 @@
+import os
 from fastapi import FastAPI
 from fastmcp import FastMCP
+from dotenv import load_dotenv
 from tools import (
     extract_risk,
     compliance_scan_tool,
     rag_search_tool
 )
+
+load_dotenv()
+
+# Configuration
+API_BASE_URL = os.getenv("API_BASE_URL", "http://api:8000")
 
 app = FastAPI(title="Compliance MCP Server")
 
