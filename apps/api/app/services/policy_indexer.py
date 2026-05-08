@@ -24,7 +24,15 @@ def index_policies():
     chunks = [c.strip() for c in text.split("\n\n") if c.strip()]
 
     # 🔥 Build BM25 index for policies
-    bm25_docs = [{"text": c, "doc_type": "policy"} for c in chunks]
+    bm25_docs = [
+        {
+            "text": c,
+            "source": "policies.txt",
+            "page": None,
+            "doc_type": "policy"
+        }
+        for c in chunks
+    ]
 
     print("[Hybrid] Building BM25 index for policies...")
     hybrid_retriever.add_documents(bm25_docs)
@@ -37,7 +45,15 @@ def index_policies():
     client.upload_collection(
         collection_name=COLLECTION_NAME,
         vectors=vectors,
-        payload=[{"text": c} for c in chunks]
+        payload=[
+                    {
+                        "text": c,
+                        "source": "policies.txt",
+                        "page": None,
+                        "doc_type": "policy"
+                    } 
+                    for c in chunks
+                ]
     )
 
     return {

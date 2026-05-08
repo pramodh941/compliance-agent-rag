@@ -1,3 +1,5 @@
+# OLD PDF Ingestion Service - Kept for reference, not used in current implementation
+
 import os
 from pypdf import PdfReader
 from app.dependencies.qdrant import get_qdrant_client

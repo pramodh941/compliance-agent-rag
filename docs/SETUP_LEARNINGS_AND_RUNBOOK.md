@@ -419,6 +419,210 @@ POST /mcp/{tool_name}
 
 # 🧠 RAG Pipeline Learnings
 
+# Embedding Ingestion & Qdrant Debugging Learnings
+
+## Problem Observed
+
+Qdrant collection showed:
+
+```json
+{
+  "points_count": 45,
+  "indexed_vectors_count": 0
+}
+```
+
+This meant points existed in Qdrant but vectors were not properly indexed, causing semantic/vector search failures.
+
+---
+
+# Root Causes Identified
+
+## 1. Missing Embedding Validation
+
+The Ollama embedding response was being trusted without validation.
+
+Potential issues:
+- missing `"embedding"` field
+- `None` embeddings
+- wrong vector dimensions
+- malformed/non-numeric vectors
+
+---
+
+## 2. Invalid Vectors Reaching Qdrant
+
+The ingestion pipeline inserted vectors into Qdrant without validating:
+- vector exists
+- vector length is correct
+- values are numeric
+
+This allowed corrupted vectors to reach storage.
+
+---
+
+## 3. Critical Bug in `sec_ingestion_service.py`
+
+Old logic:
+
+```python
+vectors = [get_embedding(c) for c in all_chunks]
+```
+
+If embedding generation failed:
+
+```python
+[vec1, None, vec3, None]
+```
+
+These `None` vectors were uploaded to Qdrant.
+
+Result:
+- points created
+- vectors not indexed
+- `indexed_vectors_count = 0`
+
+Fixed by:
+- explicit loop
+- filtering `None`
+- validating vectors before upload
+
+---
+
+# Fixes Implemented
+
+## `ollama_client.py`
+
+Added:
+- embedding response validation
+- dimension checks
+- numeric value checks
+- structured logging
+- improved error handling
+
+Validation checks:
+- embedding field exists
+- embedding is a list
+- expected dimension count
+- numeric values only
+
+---
+
+## `policy_indexer.py`
+
+Added:
+- per-vector validation
+- embedding failure tracking
+- validation failure tracking
+- detailed logging
+- post-upload Qdrant verification
+
+---
+
+## `sec_ingestion_service.py`
+
+Fixed:
+- removed unsafe list comprehension
+- added filtering for failed embeddings
+- added validation before upload
+
+---
+
+## `main.py`
+
+Added centralized logging configuration for ingestion/debug visibility.
+
+---
+
+# Key Debugging Insight
+
+If Qdrant shows:
+
+```json
+points_count > 0
+indexed_vectors_count = 0
+```
+
+then:
+- ingestion partially succeeded,
+- but vectors are malformed/missing/not indexed.
+
+Always verify both counts.
+
+---
+
+# Important Validation Rules
+
+Before uploading vectors to Qdrant:
+
+- vector must not be `None`
+- vector must be a list
+- vector length must match embedding model dimensions
+- all values must be numeric
+
+---
+
+# Useful Debug Commands
+
+## Rebuild Containers
+
+```bash
+docker compose down
+docker compose up -d --build
+```
+
+---
+
+## Check API Logs
+
+```bash
+docker logs -f compliance-api
+```
+
+---
+
+## Verify Qdrant Collection
+
+```bash
+curl http://localhost:6333/collections/policies
+```
+
+Check:
+
+```json
+indexed_vectors_count == points_count
+```
+
+---
+
+## Trigger Policy Indexing
+
+```bash
+curl -X POST http://localhost:8000/index-policies
+```
+
+---
+
+# Operational Learnings
+
+- Validate embeddings at the source.
+- Never trust external model responses blindly.
+- Add logging around every ingestion stage.
+- Validate vectors before database insertion.
+- Track failure counts explicitly.
+- Qdrant collection stats are critical for debugging ingestion issues.
+- Silent embedding failures can appear as successful ingestion.
+
+---
+
+# Final Outcome
+
+After fixes:
+- vectors uploaded correctly
+- `indexed_vectors_count` matched `points_count`
+- semantic retrieval pipeline restored
+- ingestion debugging visibility significantly improved
+
 ## Hybrid Retrieval
 
 Implemented:

@@ -13,6 +13,7 @@ node_modules/
 # Data
 apps/api/app/data/*.json
 apps/api/app/data/*.txt
+apps/api/app/data/policies/*.txt
 apps/api/app/data/sec/*.pdf
 
 # VS Code
