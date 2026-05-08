@@ -145,14 +145,14 @@ def answer_question(query: str):
     prompt = f"""
 You are a compliance assistant.
 
-Answer the question using ONLY the provided context.
+Answer using the provided context.
 
-Rules:
-- Use the context to infer answers when possible (do NOT require exact sentence match)
-- If the answer is partially available, summarize it clearly
-- Only say "Not found in provided documents" if there is truly no relevant information
-- Always be concise and factual
-- Cite source and page when possible
+Instructions:
+- Summarize policies clearly and directly
+- If relevant information exists, answer confidently
+- Do NOT say information is missing if the context contains relevant policy text
+- Keep answers concise
+- Mention policy names when available
 
 Context:
 {context}
