@@ -8,7 +8,7 @@ Endpoints:
 """
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, constr
 from typing import Optional
 from app.services.agent_service import (
     run_agent,
@@ -25,8 +25,8 @@ router = APIRouter(prefix="/agents", tags=["agents"])
 
 class AgentRequest(BaseModel):
     """Request model for agent execution"""
-    input: str
-    session_id: Optional[str] = "default"
+    input: constr(max_length=2000) = Field(..., description="Agent input text (max 2000 characters)")
+    session_id: Optional[constr(max_length=100)] = "default"
 
 
 @router.post("/run")

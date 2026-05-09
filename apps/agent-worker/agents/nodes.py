@@ -66,7 +66,7 @@ def tool_executor_node(state):
 
     try:
         normalized_result = result["result"]["structured_content"]
-    except Exception:
+    except (KeyError, TypeError) as e:
         pass
 
     observations = state.get("observations", [])

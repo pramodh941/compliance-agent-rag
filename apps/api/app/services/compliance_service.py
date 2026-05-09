@@ -1,5 +1,8 @@
 from app.services.rag_service import answer_question
 from app.db.email_repo import get_email_by_id
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def scan_email(email_id: str):
@@ -8,8 +11,8 @@ def scan_email(email_id: str):
     if not email:
         return {"error": "Email not found"}
 
-    print(f"[SCAN] Email ID: {email_id}")
-    print(f"[SCAN] Email Text: {email['text'][:100]}")
+    # Redact sensitive data from logs
+    logger.info(f"[SCAN] Processing email ID: {email_id}")
 
     query = f"""
 You are a financial compliance officer.

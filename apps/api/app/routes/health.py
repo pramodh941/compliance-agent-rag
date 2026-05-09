@@ -11,16 +11,16 @@ def health_check():
         conn = get_postgres_connection()
         conn.close()
         pg_status = "ok"
-    except:
-        pg_status = "fail"
+    except Exception as e:
+        pg_status = f"fail: {str(e)}"
 
     # Qdrant check
     try:
         client = get_qdrant_client()
         client.get_collections()
         qdrant_status = "ok"
-    except:
-        qdrant_status = "fail"
+    except Exception as e:
+        qdrant_status = f"fail: {str(e)}"
 
     return {
         "api": "ok",

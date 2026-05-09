@@ -9,8 +9,8 @@ services:
     environment:
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=admin
+      - POSTGRES_USER=${POSTGRES_USER:-admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-admin}
       - POSTGRES_DB=compliance
       - QDRANT_URL=http://qdrant:6333
       - OLLAMA_BASE_URL=http://ollama:11434
@@ -56,15 +56,15 @@ services:
     image: postgres:16
     container_name: compliance-postgres
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
       POSTGRES_DB: compliance
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d compliance"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d compliance"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -117,8 +117,8 @@ services:
     environment:
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=admin
+      - POSTGRES_USER=${POSTGRES_USER:-admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-admin}
       - POSTGRES_DB=compliance
       - OLLAMA_BASE_URL=http://ollama:11434
       - MCP_BASE_URL=http://mcp-server:8001

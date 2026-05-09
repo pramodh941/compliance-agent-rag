@@ -66,7 +66,8 @@ def get_memory(session_id: str):
         if not row:
             return []
         return row[0] or []
-    except Exception:
+    except psycopg2.Error as e:
+        print(f"[Memory] Postgres error, using in-memory fallback: {e}")
         return SESSION_MEMORY.get(session_id, [])
 
 
@@ -107,8 +108,8 @@ def save_memory(session_id: str, message):
         conn.commit()
         cursor.close()
         conn.close()
-    except Exception:
-        pass
+    except psycopg2.Error as e:
+        print(f"[Memory] Postgres error saving memory: {e}")
 
 
 def clear_memory(session_id: str):
@@ -122,5 +123,5 @@ def clear_memory(session_id: str):
         conn.commit()
         cursor.close()
         conn.close()
-    except Exception:
-        pass
+    except psycopg2.Error as e:
+        print(f"[Memory] Postgres error clearing memory: {e}")

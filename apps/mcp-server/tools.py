@@ -1,8 +1,10 @@
 import os
 import requests
 from dotenv import load_dotenv
+import logging
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 # Configuration
 API_BASE_URL = os.getenv("API_BASE_URL", "http://api:8000")
@@ -37,7 +39,7 @@ def rag_search_tool(query: str):
         # Call the real API endpoint
         response = requests.post(
             f"{API_BASE_URL}/qa",
-            params={"query": query},
+            json={"query": query},
             timeout=API_REQUEST_TIMEOUT
         )
         response.raise_for_status()
@@ -52,7 +54,7 @@ def rag_search_tool(query: str):
             "status": "success"
         }
     except requests.exceptions.ConnectionError as e:
-        print(f"[MCP] API connection failed: {e}")
+        logger.error(f"[MCP] API connection failed: {e}")
         return {
             "query": query,
             "answer": "API service unavailable",
@@ -61,7 +63,7 @@ def rag_search_tool(query: str):
             "error": str(e)
         }
     except requests.exceptions.Timeout as e:
-        print(f"[MCP] API request timeout: {e}")
+        logger.error(f"[MCP] API request timeout: {e}")
         return {
             "query": query,
             "answer": "API request timed out",
@@ -70,7 +72,7 @@ def rag_search_tool(query: str):
             "error": str(e)
         }
     except Exception as e:
-        print(f"[MCP] RAG search error: {e}")
+        logger.error(f"[MCP] RAG search error: {e}")
         return {
             "query": query,
             "answer": f"Error during RAG search: {str(e)}",
@@ -94,7 +96,7 @@ def compliance_scan_tool(email_id: str):
         # Call the real API endpoint
         response = requests.post(
             f"{API_BASE_URL}/scan-email",
-            params={"email_id": email_id},
+            json={"email_id": email_id},
             timeout=API_REQUEST_TIMEOUT
         )
         response.raise_for_status()
@@ -109,7 +111,7 @@ def compliance_scan_tool(email_id: str):
             "status": "success"
         }
     except requests.exceptions.ConnectionError as e:
-        print(f"[MCP] API connection failed: {e}")
+        logger.error(f"[MCP] API connection failed: {e}")
         return {
             "email_id": email_id,
             "analysis": {"error": "API service unavailable"},
@@ -118,7 +120,7 @@ def compliance_scan_tool(email_id: str):
             "error": str(e)
         }
     except requests.exceptions.Timeout as e:
-        print(f"[MCP] API request timeout: {e}")
+        logger.error(f"[MCP] API request timeout: {e}")
         return {
             "email_id": email_id,
             "analysis": {"error": "API request timed out"},
@@ -127,7 +129,7 @@ def compliance_scan_tool(email_id: str):
             "error": str(e)
         }
     except Exception as e:
-        print(f"[MCP] Compliance scan error: {e}")
+        logger.error(f"[MCP] Compliance scan error: {e}")
         return {
             "email_id": email_id,
             "analysis": {"error": f"Error during compliance scan: {str(e)}"},

@@ -7,7 +7,8 @@ def get_postgres_connection():
         port=settings.POSTGRES_PORT,
         user=settings.POSTGRES_USER,
         password=settings.POSTGRES_PASSWORD,
-        dbname=settings.POSTGRES_DB
+        dbname=settings.POSTGRES_DB,
+        connect_timeout=10
     )
     return conn
 
