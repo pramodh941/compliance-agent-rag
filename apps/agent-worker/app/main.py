@@ -1,12 +1,25 @@
 from fastapi import FastAPI
+import signal
+import sys
+import logging
 
 from pydantic import BaseModel
 
 from agents.graph import graph
 from agents.memory import get_memory, save_memory
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
+
+# Graceful shutdown handling
+def signal_handler(sig, frame):
+    logger.info("Shutdown signal received, closing gracefully...")
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 
 class RunRequest(BaseModel):

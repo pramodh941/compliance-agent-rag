@@ -2,6 +2,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 import uuid
+import signal
+import sys
 from app.routes import health, ingestion, alerts, policies, qa, compliance, agents, reports
 from app.routes.sec_ingestion import router as sec_router
 from app.core.logging import setup_logging, get_logger
@@ -11,6 +13,14 @@ setup_logging()
 logger = get_logger(__name__)
 
 app = FastAPI()
+
+# Graceful shutdown handling
+def signal_handler(sig, frame):
+    logger.info("Shutdown signal received, closing gracefully...")
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 # Security headers middleware
 @app.middleware("http")

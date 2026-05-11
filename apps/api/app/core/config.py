@@ -1,9 +1,12 @@
 import os
+import logging
+import warnings
 
 from dotenv import load_dotenv
 
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 
 class Settings:
@@ -29,5 +32,38 @@ class Settings:
     API_REQUEST_TIMEOUT = int(os.getenv("API_REQUEST_TIMEOUT", "180"))
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
+    def validate(self):
+        """Validate configuration and warn about insecure defaults."""
+        warnings_issued = []
+
+        # Warn on default credentials
+        if self.POSTGRES_USER == "admin" and self.POSTGRES_PASSWORD == "admin":
+            warnings_issued.append(
+                "Using default Postgres credentials (admin/admin). "
+                "Set POSTGRES_USER and POSTGRES_PASSWORD environment variables for production."
+            )
+
+        # Validate timeout ranges
+        if self.API_REQUEST_TIMEOUT < 1 or self.API_REQUEST_TIMEOUT > 600:
+            warnings_issued.append(
+                f"API_REQUEST_TIMEOUT ({self.API_REQUEST_TIMEOUT}s) outside recommended range (1-600s)"
+            )
+
+        if self.AGENT_RUN_TIMEOUT < 1 or self.AGENT_RUN_TIMEOUT > 900:
+            warnings_issued.append(
+                f"AGENT_RUN_TIMEOUT ({self.AGENT_RUN_TIMEOUT}s) outside recommended range (1-900s)"
+            )
+
+        # Validate port numbers
+        if self.POSTGRES_PORT < 1 or self.POSTGRES_PORT > 65535:
+            warnings_issued.append(f"Invalid POSTGRES_PORT: {self.POSTGRES_PORT}")
+
+        # Log warnings
+        for warning in warnings_issued:
+            logger.warning(f"Config validation: {warning}")
+
+        return len(warnings_issued) == 0
+
 
 settings = Settings()
+settings.validate()

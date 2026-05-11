@@ -1,14 +1,19 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
+from typing import Optional
 from app.dependencies.postgres import get_postgres_connection
 
 router = APIRouter()
 
 @router.get("/alerts")
-def get_alerts():
+def get_alerts(limit: Optional[int] = Query(100, ge=1, le=1000, description="Maximum number of alerts to return (1-1000)")):
+    """Get alerts with optional limit parameter."""
     conn = get_postgres_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT id, email_id, rule_type, message, created_at FROM alerts")
+    cursor.execute(
+        "SELECT id, email_id, rule_type, message, created_at FROM alerts ORDER BY created_at DESC LIMIT %s",
+        (limit,)
+    )
     rows = cursor.fetchall()
 
     cursor.close()

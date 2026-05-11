@@ -1,8 +1,19 @@
 import requests
+from app.core.config import settings
+from app.core.logging import get_logger
+from app.core.retry import retry_on_exception
+
+logger = get_logger(__name__)
 
 RERANKER_URL = "http://compliance-reranker:7997/rerank"
 
 
+@retry_on_exception(
+    max_retries=2,
+    base_delay=0.5,
+    max_delay=2.0,
+    exceptions=(requests.exceptions.ConnectionError, requests.exceptions.Timeout)
+)
 def rerank(query: str, documents: list[str]) -> list[dict]:
     if not documents:
         return []
