@@ -3,6 +3,7 @@ from app.services.ollama_client import get_embedding, generate_response
 from app.dependencies.reranker import rerank
 from app.services.hybrid_retriever import hybrid_retriever
 from app.core.logging import get_logger
+import re
 
 # 🔥 CACHE
 from app.services.cache import get_cache
@@ -32,13 +33,22 @@ def route_query(query: str) -> list:
     return ["policies", "sec_docs"]
 
 
+def sanitize_input(input_str: str) -> str:
+    # Sanitize input to prevent prompt injection
+    return re.sub(r'[^a-zA-Z0-9\s\.,!?-]', '', input_str)
+
+
 def answer_question(query: str):
     logger.info("RAG query received")
+
+    # Sanitize input to prevent prompt injection
+    sanitized_query = sanitize_input(query)
+    logger.info("Answering question", extra={"query": sanitized_query[:100]})
 
     # =========================
     # 🔥 RESPONSE CACHE (FAST PATH)
     # =========================
-    cached = cache.get(f"response:{query}")
+    cached = cache.get(f"response:{sanitized_query}")
     if cached:
         logger.info("RAG response cache hit")
         return cached
@@ -48,13 +58,13 @@ def answer_question(query: str):
     # =========================
     # 🔥 EMBEDDING
     # =========================
-    query_vector = cache.get(f"embedding:{query}")
+    query_vector = cache.get(f"embedding:{sanitized_query}")
 
     if query_vector:
         logger.info("Embedding cache hit")
     else:
-        query_vector = get_embedding(query)
-        cache.set(f"embedding:{query}", query_vector)
+        query_vector = get_embedding(sanitized_query)
+        cache.set(f"embedding:{sanitized_query}", query_vector)
         logger.info("Embedding stored")
 
     if not query_vector:
@@ -65,7 +75,7 @@ def answer_question(query: str):
 
     logger.info("Query embedding generated")
 
-    collections = route_query(query)
+    collections = route_query(sanitized_query)
     logger.info("Query routed", extra={"status": ",".join(collections)})
 
     dense_chunks = []
@@ -92,7 +102,7 @@ def answer_question(query: str):
         ])
 
     # 🔹 SPARSE RETRIEVAL (BM25)
-    sparse_chunks = hybrid_retriever.search(query, k=5)
+    sparse_chunks = hybrid_retriever.search(sanitized_query, k=5)
     logger.info("Sparse retrieval completed", extra={"status": str(len(sparse_chunks))})
 
     all_chunks_dict = {c["text"]: c for c in dense_chunks}
@@ -110,12 +120,16 @@ def answer_question(query: str):
             "answer": "Not found in provided documents",
             "context_used": ""
         }
-        cache.set(f"response:{query}", result)
+        cache.set(f"response:{sanitized_query}", result)
         return result
 
     # 🔹 RERANK
     logger.info("Sending chunks to reranker", extra={"status": str(len(all_chunks))})
-    reranked = rerank(query, [c["text"] for c in all_chunks[:8]])
+    try:
+        reranked = rerank(sanitized_query, [c["text"] for c in all_chunks[:8]])
+    except Exception as e:
+        logger.warning(f"Reranker failed, using unranked results: {e}")
+        reranked = [{"text": c["text"], "score": 1.0 - i * 0.1} for i, c in enumerate(all_chunks[:2])]
 
     top_chunks = []
     used = set()
@@ -136,7 +150,7 @@ def answer_question(query: str):
             "answer": "Not found in provided documents",
             "context_used": ""
         }
-        cache.set(f"response:{query}", result)
+        cache.set(f"response:{sanitized_query}", result)
         return result
 
     context = "\n\n".join([
@@ -160,7 +174,7 @@ Context:
 {context}
 
 Question:
-{query}
+{sanitized_query}
 
 Answer:
 """
@@ -189,7 +203,7 @@ Answer:
         "context_used": context
     }
 
-    cache.set(f"response:{query}", result)
+    cache.set(f"response:{sanitized_query}", result)
     logger.info("RAG response stored")
 
     return result

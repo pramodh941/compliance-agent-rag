@@ -1,5 +1,9 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+import logging
+import signal
+import sys
 from fastmcp import FastMCP
 from dotenv import load_dotenv
 from tools import (
@@ -13,7 +17,18 @@ load_dotenv()
 # Configuration
 API_BASE_URL = os.getenv("API_BASE_URL", "http://api:8000")
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="Compliance MCP Server")
+
+# Graceful shutdown handling
+def signal_handler(sig, frame):
+    logger.info("Shutdown signal received, closing gracefully...")
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 mcp = FastMCP("compliance-mcp")
 

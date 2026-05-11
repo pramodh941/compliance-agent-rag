@@ -56,21 +56,29 @@ def run_agent_endpoint(request: AgentRequest):
             query=request.input,
             session_id=request.session_id
         )
+        from app.core.audit import log_agent_execution
+        log_agent_execution(request.input, request.session_id, outcome="success")
         return result
         
     except AgentConnectionError as e:
+        from app.core.audit import log_agent_execution
+        log_agent_execution(request.input, request.session_id, outcome="failure")
         raise HTTPException(
             status_code=503,
             detail=f"Agent service unavailable: {str(e)}"
         )
         
     except AgentTimeoutError as e:
+        from app.core.audit import log_agent_execution
+        log_agent_execution(request.input, request.session_id, outcome="failure")
         raise HTTPException(
             status_code=504,
             detail=f"Agent request timeout: {str(e)}"
         )
         
     except AgentServiceError as e:
+        from app.core.audit import log_agent_execution
+        log_agent_execution(request.input, request.session_id, outcome="failure")
         raise HTTPException(
             status_code=500,
             detail=f"Agent error: {str(e)}"

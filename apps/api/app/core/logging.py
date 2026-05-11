@@ -27,15 +27,17 @@ class JSONFormatter(logging.Formatter):
 
 
 def setup_logging():
-    root = logging.getLogger()
-    root.handlers.clear()
-
+    """Configure JSON structured logging with enhanced context."""
+    formatter = JSONFormatter()
+    
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(JSONFormatter())
+    handler.setFormatter(formatter)
+    
+    root_logger = logging.getLogger()
+    root_logger.setLevel(settings.LOG_LEVEL)
+    root_logger.addHandler(handler)
 
-    root.addHandler(handler)
-    root.setLevel(settings.LOG_LEVEL)
 
-
-def get_logger(name: str):
+def get_logger(name: str) -> logging.Logger:
+    """Get a logger instance."""
     return logging.getLogger(name)

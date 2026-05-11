@@ -10,6 +10,7 @@ from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.core.retry import retry_on_exception
 from app.dependencies.postgres import get_postgres_connection, initialize_schema
 
 load_dotenv()
@@ -62,16 +63,24 @@ def run_agent(
     try:
         logger.info("Running agent", extra={"session_id": session_id})
         
-        # Call agent-worker endpoint
-        response = requests.post(
-            f"{AGENT_WORKER_URL}/run",
-            json={
-                "input": query,
-                "session_id": session_id
-            },
-            timeout=AGENT_RUN_TIMEOUT
+        # Call agent-worker endpoint with retry
+        @retry_on_exception(
+            max_retries=2,
+            base_delay=0.5,
+            max_delay=2.0,
+            exceptions=(requests.exceptions.ConnectionError, requests.exceptions.Timeout)
         )
+        def call_agent_worker():
+            return requests.post(
+                f"{AGENT_WORKER_URL}/run",
+                json={
+                    "input": query,
+                    "session_id": session_id
+                },
+                timeout=AGENT_RUN_TIMEOUT
+            )
         
+        response = call_agent_worker()
         response.raise_for_status()
         
         data = response.json()
@@ -237,10 +246,19 @@ def health_check() -> Dict[str, Any]:
     """
     
     try:
-        response = requests.get(
-            f"{AGENT_WORKER_URL}/health",
-            timeout=5
+        @retry_on_exception(
+            max_retries=1,
+            base_delay=0.5,
+            max_delay=1.0,
+            exceptions=(requests.exceptions.ConnectionError, requests.exceptions.Timeout)
         )
+        def call_health():
+            return requests.get(
+                f"{AGENT_WORKER_URL}/health",
+                timeout=5
+            )
+        
+        response = call_health()
         
         if response.status_code == 200:
             return {
