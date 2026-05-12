@@ -3,7 +3,9 @@ from app.services.ollama_client import get_embedding, generate_response
 from app.dependencies.reranker import rerank
 from app.services.hybrid_retriever import hybrid_retriever
 from app.core.logging import get_logger
+from app.core.config import settings
 import re
+import time
 
 # 🔥 CACHE
 from app.services.cache import get_cache
@@ -39,6 +41,7 @@ def sanitize_input(input_str: str) -> str:
 
 
 def answer_question(query: str):
+    rag_start = time.time()
     logger.info("RAG query received")
 
     # Sanitize input to prevent prompt injection
@@ -58,6 +61,7 @@ def answer_question(query: str):
     # =========================
     # 🔥 EMBEDDING
     # =========================
+    embedding_start = time.time()
     query_vector = cache.get(f"embedding:{sanitized_query}")
 
     if query_vector:
@@ -67,7 +71,18 @@ def answer_question(query: str):
         cache.set(f"embedding:{sanitized_query}", query_vector)
         logger.info("Embedding stored")
 
+    embedding_duration_ms = (time.time() - embedding_start) * 1000
+
     if not query_vector:
+        logger.warning(
+            "Embedding generation failed",
+            extra={
+                "operation": "rag_retrieval",
+                "stage": "embedding",
+                "duration_ms": round(embedding_duration_ms, 2),
+                "success": False
+            }
+        )
         return {
             "answer": "Failed to process query",
             "context_used": ""
@@ -78,14 +93,15 @@ def answer_question(query: str):
     collections = route_query(sanitized_query)
     logger.info("Query routed", extra={"status": ",".join(collections)})
 
+    # 🔹 DENSE RETRIEVAL
+    dense_start = time.time()
     dense_chunks = []
 
-    # 🔹 DENSE RETRIEVAL
     for col in collections:
         results = qdrant.query_points(
             collection_name=col,
             query=query_vector,
-            limit=5
+            limit=settings.DENSE_RETRIEVAL_LIMIT
         )
 
         logger.info("Dense retrieval completed", extra={"status": f"{col}:{len(results.points)}"})
@@ -101,8 +117,12 @@ def answer_question(query: str):
             for p in results.points
         ])
 
+    dense_duration_ms = (time.time() - dense_start) * 1000
+
     # 🔹 SPARSE RETRIEVAL (BM25)
-    sparse_chunks = hybrid_retriever.search(sanitized_query, k=5)
+    sparse_start = time.time()
+    sparse_chunks = hybrid_retriever.search(sanitized_query, k=settings.SPARSE_RETRIEVAL_K)
+    sparse_duration_ms = (time.time() - sparse_start) * 1000
     logger.info("Sparse retrieval completed", extra={"status": str(len(sparse_chunks))})
 
     all_chunks_dict = {c["text"]: c for c in dense_chunks}
@@ -116,6 +136,16 @@ def answer_question(query: str):
     logger.info("Merged chunks", extra={"status": str(len(all_chunks))})
 
     if not all_chunks:
+        logger.warning(
+            "No chunks retrieved",
+            extra={
+                "operation": "rag_retrieval",
+                "stage": "retrieval",
+                "dense_count": len(dense_chunks),
+                "sparse_count": len(sparse_chunks),
+                "success": False
+            }
+        )
         result = {
             "answer": "Not found in provided documents",
             "context_used": ""
@@ -124,12 +154,24 @@ def answer_question(query: str):
         return result
 
     # 🔹 RERANK
+    rerank_start = time.time()
     logger.info("Sending chunks to reranker", extra={"status": str(len(all_chunks))})
-    try:
-        reranked = rerank(sanitized_query, [c["text"] for c in all_chunks[:8]])
-    except Exception as e:
-        logger.warning(f"Reranker failed, using unranked results: {e}")
-        reranked = [{"text": c["text"], "score": 1.0 - i * 0.1} for i, c in enumerate(all_chunks[:2])]
+    
+    if settings.ENABLE_RERANKING:
+        try:
+            reranked = rerank(sanitized_query, [c["text"] for c in all_chunks[:8]])
+            rerank_duration_ms = (time.time() - rerank_start) * 1000
+            rerank_success = True
+        except Exception as e:
+            rerank_duration_ms = (time.time() - rerank_start) * 1000
+            rerank_success = False
+            logger.warning(f"Reranker failed, using unranked results: {e}")
+            reranked = [{"text": c["text"], "score": 1.0 - i * 0.1} for i, c in enumerate(all_chunks[:settings.RERANK_TOP_K])]
+    else:
+        rerank_duration_ms = 0
+        rerank_success = False
+        logger.info("Reranking disabled, using top dense results")
+        reranked = [{"text": c["text"], "score": c.get("score", 1.0)} for c in all_chunks[:settings.RERANK_TOP_K]]
 
     top_chunks = []
     used = set()
@@ -142,10 +184,18 @@ def answer_question(query: str):
                 used.add(i)
                 break
 
-        if len(top_chunks) == 2:
+        if len(top_chunks) == settings.RERANK_TOP_K:
             break
 
     if not top_chunks:
+        logger.warning(
+            "No top chunks after reranking",
+            extra={
+                "operation": "rag_retrieval",
+                "stage": "reranking",
+                "success": False
+            }
+        )
         result = {
             "answer": "Not found in provided documents",
             "context_used": ""
@@ -154,21 +204,28 @@ def answer_question(query: str):
         return result
 
     context = "\n\n".join([
-        f"[Source: {c['source']} | Page: {c['page']}]\n{c['text'][:400]}"
+        f"[Source: {c['source']} | Page: {c['page']}]\n{c['text'][:settings.MAX_CONTEXT_LENGTH]}"
         for c in top_chunks
     ])
 
+    # System prompt for hardening against prompt injection and hallucination
+    system_prompt = """
+You are a compliance assistant for a financial services company.
+
+Your role is to answer questions about company policies and regulatory requirements based ONLY on the provided context.
+
+STRICT RULES:
+- Answer ONLY using information from the provided context
+- If the context does not contain relevant information, state that clearly
+- Do NOT make up or hallucinate information
+- Do NOT claim to have information that is not in the context
+- If the answer is not in the context, say "I cannot answer this question from the provided documents"
+- Keep answers factual and concise
+- Reference specific policy names when available
+"""
+
     prompt = f"""
-You are a compliance assistant.
-
-Answer using the provided context.
-
-Instructions:
-- Summarize policies clearly and directly
-- If relevant information exists, answer confidently
-- Do NOT say information is missing if the context contains relevant policy text
-- Keep answers concise
-- Mention policy names when available
+{system_prompt}
 
 Context:
 {context}
@@ -179,7 +236,10 @@ Question:
 Answer:
 """
 
+    # 🔹 LLM GENERATION
+    generation_start = time.time()
     answer = generate_response(prompt)
+    generation_duration_ms = (time.time() - generation_start) * 1000
 
     if "does not provide any information" in answer.lower() and top_chunks:
         policy_names = []
@@ -204,6 +264,24 @@ Answer:
     }
 
     cache.set(f"response:{sanitized_query}", result)
-    logger.info("RAG response stored")
+    
+    total_duration_ms = (time.time() - rag_start) * 1000
+    logger.info(
+        "RAG query completed",
+        extra={
+            "operation": "rag_retrieval",
+            "total_duration_ms": round(total_duration_ms, 2),
+            "embedding_duration_ms": round(embedding_duration_ms, 2),
+            "dense_retrieval_duration_ms": round(dense_duration_ms, 2),
+            "sparse_retrieval_duration_ms": round(sparse_duration_ms, 2),
+            "rerank_duration_ms": round(rerank_duration_ms, 2),
+            "generation_duration_ms": round(generation_duration_ms, 2),
+            "dense_chunks_count": len(dense_chunks),
+            "sparse_chunks_count": len(sparse_chunks),
+            "final_chunks_count": len(top_chunks),
+            "rerank_success": rerank_success,
+            "cache_hit": False
+        }
+    )
 
     return result
