@@ -32,6 +32,14 @@ class Settings:
     API_REQUEST_TIMEOUT = int(os.getenv("API_REQUEST_TIMEOUT", "180"))
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
+    # RAG Retrieval Parameters
+    DENSE_RETRIEVAL_LIMIT = int(os.getenv("DENSE_RETRIEVAL_LIMIT", "5"))
+    SPARSE_RETRIEVAL_K = int(os.getenv("SPARSE_RETRIEVAL_K", "5"))
+    RERANK_TOP_K = int(os.getenv("RERANK_TOP_K", "2"))
+    MAX_CONTEXT_LENGTH = int(os.getenv("MAX_CONTEXT_LENGTH", "400"))
+    MAX_EMBEDDING_CHARS = int(os.getenv("MAX_EMBEDDING_CHARS", "4000"))
+    ENABLE_RERANKING = os.getenv("ENABLE_RERANKING", "true").lower() == "true"
+
     def validate(self):
         """Validate configuration and warn about insecure defaults."""
         warnings_issued = []
@@ -57,6 +65,22 @@ class Settings:
         # Validate port numbers
         if self.POSTGRES_PORT < 1 or self.POSTGRES_PORT > 65535:
             warnings_issued.append(f"Invalid POSTGRES_PORT: {self.POSTGRES_PORT}")
+
+        # Validate RAG parameters
+        if self.DENSE_RETRIEVAL_LIMIT < 1 or self.DENSE_RETRIEVAL_LIMIT > 20:
+            warnings_issued.append(
+                f"DENSE_RETRIEVAL_LIMIT ({self.DENSE_RETRIEVAL_LIMIT}) outside recommended range (1-20)"
+            )
+
+        if self.SPARSE_RETRIEVAL_K < 1 or self.SPARSE_RETRIEVAL_K > 20:
+            warnings_issued.append(
+                f"SPARSE_RETRIEVAL_K ({self.SPARSE_RETRIEVAL_K}) outside recommended range (1-20)"
+            )
+
+        if self.RERANK_TOP_K < 1 or self.RERANK_TOP_K > 10:
+            warnings_issued.append(
+                f"RERANK_TOP_K ({self.RERANK_TOP_K}) outside recommended range (1-10)"
+            )
 
         # Log warnings
         for warning in warnings_issued:
