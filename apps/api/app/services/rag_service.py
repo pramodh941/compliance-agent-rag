@@ -20,19 +20,42 @@ COLLECTIONS = {
 
 
 def route_query(query: str) -> list:
+    """
+    Route query to appropriate collections with improved keyword matching.
+    
+    Prioritizes specific collections based on query content to improve
+    retrieval grounding and reduce cross-collection contamination.
+    """
     query_lower = query.lower()
-
-    if any(word in query_lower for word in [
-        "sec", "rule", "regulation", "adviser", "act", "compliance rule"
-    ]):
+    
+    # SEC-specific keywords (highest priority)
+    sec_keywords = [
+        "sec", "rule", "regulation", "adviser", "act", "compliance rule",
+        "exchange", "commission", "risk alert", "market rule", "examination"
+    ]
+    
+    # Policy-specific keywords (highest priority)
+    policy_keywords = [
+        "policy", "employee", "internal", "mnpi", "gifts",
+        "trading", "personal", "communication", "workplace", "ethics",
+        "insider", "material", "non-public", "information"
+    ]
+    
+    # Count matches for each collection
+    sec_matches = sum(1 for word in sec_keywords if word in query_lower)
+    policy_matches = sum(1 for word in policy_keywords if word in query_lower)
+    
+    # Route based on match counts
+    if sec_matches > policy_matches:
         return ["sec_docs"]
-
-    if any(word in query_lower for word in [
-        "policy", "employee", "internal", "mnpi", "gifts"
-    ]):
+    elif policy_matches > sec_matches:
         return ["policies"]
-
-    return ["policies", "sec_docs"]
+    elif sec_matches > 0 and policy_matches > 0:
+        # Both have matches, return both but prioritize based on count
+        return ["sec_docs", "policies"] if sec_matches >= policy_matches else ["policies", "sec_docs"]
+    else:
+        # No clear matches, search both
+        return ["policies", "sec_docs"]
 
 
 def sanitize_input(input_str: str) -> str:
@@ -106,16 +129,23 @@ def answer_question(query: str):
 
         logger.info("Dense retrieval completed", extra={"status": f"{col}:{len(results.points)}"})
 
-        dense_chunks.extend([
-            {
+        # Extract chunks with metadata for better grounding
+        for p in results.points:
+            chunk = {
                 "text": p.payload["text"],
                 "source": p.payload.get("source"),
                 "page": p.payload.get("page"),
                 "doc_type": p.payload.get("doc_type"),
                 "score": p.score
             }
-            for p in results.points
-        ])
+            
+            # Add metadata fields if available for better grounding
+            if "title" in p.payload:
+                chunk["title"] = p.payload["title"]
+            if "section_headers" in p.payload and p.payload["section_headers"]:
+                chunk["section_headers"] = p.payload["section_headers"]
+            
+            dense_chunks.append(chunk)
 
     dense_duration_ms = (time.time() - dense_start) * 1000
 
@@ -204,7 +234,7 @@ def answer_question(query: str):
         return result
 
     context = "\n\n".join([
-        f"[Source: {c['source']} | Page: {c['page']}]\n{c['text'][:settings.MAX_CONTEXT_LENGTH]}"
+        f"[Source: {c['source']} | Page: {c['page']} | Title: {c.get('title', 'N/A')}]\n{c['text'][:settings.MAX_CONTEXT_LENGTH]}"
         for c in top_chunks
     ])
 

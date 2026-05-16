@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request
 from app.dependencies.postgres import get_postgres_connection
 from app.dependencies.qdrant import get_qdrant_client
 from app.core.config import settings
+from app.core.ingestion_config import IngestionConfig
 from app.core.logging import get_logger
 import requests
 
@@ -70,6 +71,9 @@ def diagnostics(request: Request):
     from app.services.hybrid_retriever import hybrid_retriever
     bm25_corpus_size = len(hybrid_retriever.corpus) if hasattr(hybrid_retriever, 'corpus') else 0
     
+    # Get ingestion config
+    ingestion_config = IngestionConfig()
+    
     return {
         "correlation_id": correlation_id,
         "timestamp": logger.info("Diagnostics requested", extra={"correlation_id": correlation_id}),
@@ -86,6 +90,7 @@ def diagnostics(request: Request):
             "max_embedding_chars": settings.MAX_EMBEDDING_CHARS,
             "enable_reranking": settings.ENABLE_RERANKING
         },
+        "ingestion_config": ingestion_config.get_summary(),
         "cache": {
             "size": cache_size,
             "ttl_seconds": cache_instance.ttl if hasattr(cache_instance, 'ttl') else 300
@@ -99,6 +104,9 @@ def diagnostics(request: Request):
             "diagnostics": "/diagnostics",
             "qa": "/qa",
             "scan_email": "/scan-email",
-            "agents_run": "/agents/run"
+            "agents_run": "/agents/run",
+            "ingest": "/ingest",
+            "ingest_status": "/ingest/status",
+            "ingest_config": "/ingest/config"
         }
     }
