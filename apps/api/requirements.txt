@@ -4,6 +4,7 @@ psycopg2-binary
 qdrant-client
 requests
 pymupdf4llm
+pypdf
 cryptography>=3.1
 rank-bm25
 python-dotenv
