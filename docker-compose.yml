@@ -7,6 +7,7 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - DEPLOYMENT_PROFILE=${DEPLOYMENT_PROFILE:-local-lite}
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER:-admin}
@@ -15,15 +16,20 @@ services:
       - QDRANT_URL=http://qdrant:6333
       - OLLAMA_BASE_URL=http://ollama:11434
       - AGENT_WORKER_URL=http://agent-worker:8002
-      - API_REQUEST_TIMEOUT=180
-      - AGENT_RUN_TIMEOUT=300
+      - RERANKER_URL=http://reranker:7997
+      - API_REQUEST_TIMEOUT=${API_REQUEST_TIMEOUT:-180}
+      - AGENT_RUN_TIMEOUT=${AGENT_RUN_TIMEOUT:-300}
+      - ENABLE_RERANKING=${ENABLE_RERANKING:-false}
+      - ENABLE_OCR=${ENABLE_OCR:-false}
+      - ENABLE_LAYOUT_PARSING=${ENABLE_LAYOUT_PARSING:-false}
+      - ENABLE_SEMANTIC_CHUNKING=${ENABLE_SEMANTIC_CHUNKING:-false}
     volumes:
       - ./apps/api/app:/app/app
+      - ./packages:/app/packages
     depends_on:
       - postgres
       - qdrant
       - ollama
-      - reranker
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
       interval: 30s
@@ -106,6 +112,9 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    profiles:
+      - local-full
+      - cloud-production
 
   agent-worker:
     build:
@@ -115,6 +124,7 @@ services:
     ports:
       - "8002:8002"
     environment:
+      - DEPLOYMENT_PROFILE=${DEPLOYMENT_PROFILE:-local-lite}
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER:-admin}
@@ -122,10 +132,11 @@ services:
       - POSTGRES_DB=compliance
       - OLLAMA_BASE_URL=http://ollama:11434
       - MCP_BASE_URL=http://mcp-server:8001
-      - MCP_TIMEOUT=180
-      - PLANNER_TIMEOUT=180
+      - MCP_TIMEOUT=${MCP_TIMEOUT:-180}
+      - PLANNER_TIMEOUT=${PLANNER_TIMEOUT:-180}
     volumes:
       - ./apps/agent-worker:/app
+      - ./packages:/app/packages
     depends_on:
       - mcp-server
       - postgres
