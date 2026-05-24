@@ -1,9 +1,14 @@
 """
-Ingestion configuration with feature toggles for local-lite compatibility.
+Ingestion Configuration - Backward compatible wrapper around centralized config.
 
-Provides centralized configuration for document ingestion with optional
-OCR, advanced parsing, and metadata extraction features.
+This module provides backward compatibility for existing code while
+delegating to the new centralized configuration system.
+
+New code should import from packages.config directly:
+    from packages.config import get_config
+    config = get_config()
 """
+
 import os
 import logging
 import warnings
@@ -17,49 +22,44 @@ except ImportError:
     # (environment variables should be set elsewhere)
     pass
 
+# Import centralized configuration
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../../..'))
+from packages.config import get_config
+
 logger = logging.getLogger(__name__)
+
+# Get centralized configuration
+_central_config = get_config()
 
 
 class IngestionConfig:
-    """Centralized ingestion configuration with feature toggles."""
+    """Backward compatible IngestionConfig class that wraps centralized config."""
     
     # =========================
     # CORE INGESTION
     # =========================
     
-    # Chunking parameters
-    CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "800"))
-    CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))
-    MIN_CHUNK_SIZE = int(os.getenv("MIN_CHUNK_SIZE", "100"))
+    # Chunking parameters (from centralized config)
+    CHUNK_SIZE = _central_config.chunk_size
+    CHUNK_OVERLAP = _central_config.chunk_overlap
+    MIN_CHUNK_SIZE = _central_config.min_chunk_size
     
-    # Collection names
-    POLICIES_COLLECTION = os.getenv("POLICIES_COLLECTION", "policies")
-    SEC_DOCS_COLLECTION = os.getenv("SEC_DOCS_COLLECTION", "sec_docs")
+    # Collection names (from centralized config)
+    POLICIES_COLLECTION = _central_config.policies_collection
+    SEC_DOCS_COLLECTION = _central_config.sec_docs_collection
     
     # =========================
-    # FEATURE TOGGLES
+    # FEATURE TOGGLES (from feature manager)
     # =========================
     
-    # Enable/disable advanced PDF parsing (layout-aware)
-    ENABLE_LAYOUT_PARSING = os.getenv("ENABLE_LAYOUT_PARSING", "false").lower() == "true"
-    
-    # Enable/disable OCR fallback for scanned PDFs (requires pytesseract)
-    ENABLE_OCR = os.getenv("ENABLE_OCR", "false").lower() == "true"
-    
-    # Enable/disable table extraction (requires pdfplumber)
-    ENABLE_TABLE_EXTRACTION = os.getenv("ENABLE_TABLE_EXTRACTION", "false").lower() == "true"
-    
-    # Enable/disable image extraction (requires pdf2image)
-    ENABLE_IMAGE_EXTRACTION = os.getenv("ENABLE_IMAGE_EXTRACTION", "false").lower() == "true"
-    
-    # Enable/disable semantic chunking (requires sentence-transformers)
-    ENABLE_SEMANTIC_CHUNKING = os.getenv("ENABLE_SEMANTIC_CHUNKING", "false").lower() == "true"
-    
-    # Enable/disable document hierarchy detection
-    ENABLE_HIERARCHY_DETECTION = os.getenv("ENABLE_HIERARCHY_DETECTION", "true").lower() == "true"
-    
-    # Enable/disable metadata extraction
-    ENABLE_METADATA_EXTRACTION = os.getenv("ENABLE_METADATA_EXTRACTION", "true").lower() == "true"
+    ENABLE_LAYOUT_PARSING = _central_config.feature_manager.is_enabled("layout_parsing")
+    ENABLE_OCR = _central_config.feature_manager.is_enabled("ocr")
+    ENABLE_TABLE_EXTRACTION = _central_config.feature_manager.is_enabled("table_extraction")
+    ENABLE_IMAGE_EXTRACTION = _central_config.feature_manager.is_enabled("image_extraction")
+    ENABLE_SEMANTIC_CHUNKING = _central_config.feature_manager.is_enabled("semantic_chunking")
+    ENABLE_HIERARCHY_DETECTION = _central_config.feature_manager.is_enabled("hierarchy_detection")
+    ENABLE_METADATA_EXTRACTION = _central_config.feature_manager.is_enabled("metadata_extraction")
     
     # =========================
     # OCR CONFIGURATION (OPTIONAL)
@@ -70,26 +70,18 @@ class IngestionConfig:
     OCR_TIMEOUT = int(os.getenv("OCR_TIMEOUT", "30"))
     
     # =========================
-    # PARSING CONFIGURATION
+    # PARSING CONFIGURATION (from centralized config)
     # =========================
     
-    # PDF parsing library preference: pypdf, pdfplumber, pymupdf
-    PDF_PARSER = os.getenv("PDF_PARSER", "pypdf")
-    
-    # Text extraction mode: text, layout, preserve
+    PDF_PARSER = _central_config.pdf_parser
     TEXT_EXTRACTION_MODE = os.getenv("TEXT_EXTRACTION_MODE", "text")
     
     # =========================
-    # CHUNKING CONFIGURATION
+    # CHUNKING CONFIGURATION (from centralized config)
     # =========================
     
-    # Chunking strategy: simple, semantic, hierarchical, recursive
-    CHUNKING_STRATEGY = os.getenv("CHUNKING_STRATEGY", "simple")
-    
-    # Semantic chunking parameters
+    CHUNKING_STRATEGY = _central_config.chunking_strategy
     SEMANTIC_CHUNK_THRESHOLD = float(os.getenv("SEMANTIC_CHUNK_THRESHOLD", "0.7"))
-    
-    # Hierarchical chunking parameters
     PRESERVE_HEADERS = os.getenv("PRESERVE_HEADERS", "true").lower() == "true"
     PRESERVE_PAGE_BREAKS = os.getenv("PRESERVE_PAGE_BREAKS", "true").lower() == "true"
     
@@ -97,7 +89,6 @@ class IngestionConfig:
     # METADATA CONFIGURATION
     # =========================
     
-    # Metadata fields to extract
     EXTRACT_TITLE = os.getenv("EXTRACT_TITLE", "true").lower() == "true"
     EXTRACT_AUTHOR = os.getenv("EXTRACT_AUTHOR", "false").lower() == "true"
     EXTRACT_DATE = os.getenv("EXTRACT_DATE", "true").lower() == "true"
@@ -108,23 +99,15 @@ class IngestionConfig:
     # VALIDATION CONFIGURATION
     # =========================
     
-    # Minimum text length for valid chunk
     MIN_TEXT_LENGTH = int(os.getenv("MIN_TEXT_LENGTH", "50"))
-    
-    # Maximum text length for valid chunk
     MAX_TEXT_LENGTH = int(os.getenv("MAX_TEXT_LENGTH", "5000"))
     
     # =========================
-    # PERFORMANCE CONFIGURATION
+    # PERFORMANCE CONFIGURATION (from profile config)
     # =========================
     
-    # Batch size for embedding generation
-    EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "10"))
-    
-    # Maximum concurrent document processing
-    MAX_CONCURRENT_DOCS = int(os.getenv("MAX_CONCURRENT_DOCS", "4"))
-    
-    # Timeout for document processing (seconds)
+    EMBEDDING_BATCH_SIZE = _central_config.profile_config.embedding_batch_size
+    MAX_CONCURRENT_DOCS = _central_config.profile_config.max_concurrent_docs
     DOC_PROCESSING_TIMEOUT = int(os.getenv("DOC_PROCESSING_TIMEOUT", "300"))
     
     @classmethod

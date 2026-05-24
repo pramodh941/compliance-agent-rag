@@ -1,63 +1,46 @@
+"""
+Agent Worker Configuration - Backward compatible wrapper around centralized config.
+
+This module provides backward compatibility for existing code while
+delegating to the new centralized configuration system.
+
+New code should import from packages.config directly:
+    from packages.config import get_config
+    config = get_config()
+"""
+
 import os
 import logging
 import warnings
 
 from dotenv import load_dotenv
 
+# Import centralized configuration
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../../..'))
+from packages.config import get_config
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+# Get centralized configuration
+_central_config = get_config()
+
 
 class Settings:
+    """Backward compatible Settings class that wraps centralized config."""
 
-    # =========================
-    # OLLAMA
-    # =========================
+    # OLLAMA configuration
+    OLLAMA_BASE_URL = _central_config.ollama_base_url
+    PLANNER_MODEL = _central_config.model_manager.llm_model.name if _central_config.model_manager.llm_model else os.getenv("PLANNER_MODEL", "gemma:2b")
+    PLANNER_TIMEOUT = int(os.getenv("PLANNER_TIMEOUT", str(_central_config.profile_config.planner_timeout)))
 
-    OLLAMA_BASE_URL = os.getenv(
-        "OLLAMA_BASE_URL",
-        "http://ollama:11434"
-    )
+    # Agent configuration
+    MAX_ITERATIONS = int(os.getenv("MAX_ITERATIONS", "3"))
 
-    PLANNER_MODEL = os.getenv(
-        "PLANNER_MODEL",
-        "gemma:2b"
-    )
-
-    PLANNER_TIMEOUT = int(
-        os.getenv(
-            "PLANNER_TIMEOUT",
-            "180"
-        )
-    )
-
-    # =========================
-    # AGENT
-    # =========================
-
-    MAX_ITERATIONS = int(
-        os.getenv(
-            "MAX_ITERATIONS",
-            "3"
-        )
-    )
-
-    # =========================
-    # MCP
-    # =========================
-
-    MCP_BASE_URL = os.getenv(
-        "MCP_BASE_URL",
-        "http://mcp-server:8001"
-    )
-
-    MCP_TIMEOUT = int(
-        os.getenv(
-            "MCP_TIMEOUT",
-            "180"
-        )
-    )
+    # MCP configuration
+    MCP_BASE_URL = _central_config.mcp_base_url
+    MCP_TIMEOUT = int(os.getenv("MCP_TIMEOUT", str(_central_config.profile_config.planner_timeout)))
 
     def validate(self):
         """Validate configuration and warn about invalid settings."""

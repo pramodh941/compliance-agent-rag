@@ -1,44 +1,71 @@
+"""
+API Configuration - Backward compatible wrapper around centralized config.
+
+This module provides backward compatibility for existing code while
+delegating to the new centralized configuration system.
+
+New code should import from packages.config directly:
+    from packages.config import get_config
+    config = get_config()
+"""
+
 import os
 import logging
 import warnings
 
 from dotenv import load_dotenv
 
+# Import centralized configuration
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../../..'))
+from packages.config import get_config
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+# Get centralized configuration
+_central_config = get_config()
+
 
 class Settings:
-    POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres")
-    POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))
-    POSTGRES_USER = os.getenv("POSTGRES_USER", "admin")
-    POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "admin")
-    POSTGRES_DB = os.getenv("POSTGRES_DB", "compliance")
-    POSTGRES_URL = os.getenv(
-        "POSTGRES_URL",
-        f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}",
-    )
+    """Backward compatible Settings class that wraps centralized config."""
+    
+    # Database configuration
+    POSTGRES_HOST = _central_config.postgres_host
+    POSTGRES_PORT = _central_config.postgres_port
+    POSTGRES_USER = _central_config.postgres_user
+    POSTGRES_PASSWORD = _central_config.postgres_password
+    POSTGRES_DB = _central_config.postgres_db
+    POSTGRES_URL = _central_config.postgres_url
 
-    QDRANT_URL = os.getenv("QDRANT_URL", "http://qdrant:6333")
-    OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
-    MCP_BASE_URL = os.getenv("MCP_BASE_URL", "http://mcp-server:8001")
-    AGENT_WORKER_URL = os.getenv("AGENT_WORKER_URL", "http://agent-worker:8002")
+    # Service URLs
+    QDRANT_URL = _central_config.qdrant_url
+    OLLAMA_BASE_URL = _central_config.ollama_base_url
+    MCP_BASE_URL = _central_config.mcp_base_url
+    AGENT_WORKER_URL = _central_config.agent_worker_url
+    RERANKER_URL = _central_config.reranker_url
 
-    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
-    PLANNER_MODEL = os.getenv("PLANNER_MODEL", "gemma:2b")
+    # Model configuration (from centralized config)
+    EMBEDDING_MODEL = _central_config.model_manager.embedding_model.name if _central_config.model_manager.embedding_model else os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
+    PLANNER_MODEL = _central_config.model_manager.llm_model.name if _central_config.model_manager.llm_model else os.getenv("PLANNER_MODEL", "gemma:2b")
 
-    AGENT_RUN_TIMEOUT = int(os.getenv("AGENT_RUN_TIMEOUT", "300"))
-    API_REQUEST_TIMEOUT = int(os.getenv("API_REQUEST_TIMEOUT", "180"))
-    LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+    # Timeouts
+    AGENT_RUN_TIMEOUT = int(os.getenv("AGENT_RUN_TIMEOUT", str(_central_config.profile_config.agent_run_timeout)))
+    API_REQUEST_TIMEOUT = int(os.getenv("API_REQUEST_TIMEOUT", str(_central_config.profile_config.api_request_timeout)))
+    LOG_LEVEL = _central_config.log_level
 
-    # RAG Retrieval Parameters
-    DENSE_RETRIEVAL_LIMIT = int(os.getenv("DENSE_RETRIEVAL_LIMIT", "5"))
-    SPARSE_RETRIEVAL_K = int(os.getenv("SPARSE_RETRIEVAL_K", "5"))
-    RERANK_TOP_K = int(os.getenv("RERANK_TOP_K", "2"))
+    # RAG Retrieval Parameters (from profile config)
+    DENSE_RETRIEVAL_LIMIT = _central_config.profile_config.dense_retrieval_limit
+    SPARSE_RETRIEVAL_K = _central_config.profile_config.sparse_retrieval_k
+    RERANK_TOP_K = _central_config.profile_config.rerank_top_k
     MAX_CONTEXT_LENGTH = int(os.getenv("MAX_CONTEXT_LENGTH", "400"))
     MAX_EMBEDDING_CHARS = int(os.getenv("MAX_EMBEDDING_CHARS", "4000"))
-    ENABLE_RERANKING = os.getenv("ENABLE_RERANKING", "true").lower() == "true"
+    
+    # Feature toggles (from feature manager)
+    ENABLE_RERANKING = _central_config.feature_manager.is_enabled("reranker")
+    ENABLE_OCR = _central_config.feature_manager.is_enabled("ocr")
+    ENABLE_LAYOUT_PARSING = _central_config.feature_manager.is_enabled("layout_parsing")
+    ENABLE_SEMANTIC_CHUNKING = _central_config.feature_manager.is_enabled("semantic_chunking")
 
     def validate(self):
         """Validate configuration and warn about insecure defaults."""
