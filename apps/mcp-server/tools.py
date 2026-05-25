@@ -1,17 +1,48 @@
-import os
-import requests
-from dotenv import load_dotenv
+import time
 import logging
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, List
 
-load_dotenv()
+try:
+    import requests
+    REQUEST_EXCEPTIONS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
+except ImportError:
+    requests = None
+    REQUEST_EXCEPTIONS = ()
+
+from config import settings
+
 logger = logging.getLogger(__name__)
 
-# Configuration
-API_BASE_URL = os.getenv("API_BASE_URL", "http://api:8000")
-API_REQUEST_TIMEOUT = int(os.getenv("API_REQUEST_TIMEOUT", "180"))
+
+class ToolValidationError(ValueError):
+    """Raised when an MCP tool request is malformed or unsafe to execute."""
 
 
-def retry_request(max_retries: int = 2, base_delay: float = 0.5):
+@dataclass(frozen=True)
+class ToolSpec:
+    name: str
+    handler: Callable[..., Dict[str, Any]]
+    description: str
+    required_args: List[str]
+    optional_args: List[str]
+    timeout_seconds: int = settings.request_timeout_seconds
+
+    @property
+    def input_schema(self) -> Dict[str, Any]:
+        properties = {
+            arg: {"type": "string", "minLength": 1}
+            for arg in [*self.required_args, *self.optional_args]
+        }
+        return {
+            "type": "object",
+            "properties": properties,
+            "required": self.required_args,
+            "additionalProperties": False,
+        }
+
+
+def retry_request(max_retries: int = settings.max_retries, base_delay: float = 0.5):
     """Simple retry decorator for MCP tool API calls."""
     def decorator(func):
         def wrapper(*args, **kwargs):
@@ -21,15 +52,18 @@ def retry_request(max_retries: int = 2, base_delay: float = 0.5):
             for attempt in range(max_retries + 1):
                 try:
                     return func(*args, **kwargs)
-                except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                except REQUEST_EXCEPTIONS as e:
                     last_exception = e
                     
                     if attempt == max_retries:
-                        logger.error(f"MCP API call failed after {max_retries} retries: {e}")
+                        logger.error("MCP API call failed after retries", extra={"status": "error"})
                         raise
                     
                     delay = min(base_delay * (2 ** attempt), 2.0)
-                    logger.warning(f"MCP API call failed (attempt {attempt + 1}), retrying in {delay:.2f}s")
+                    logger.warning(
+                        "MCP API call failed, retrying",
+                        extra={"status": "retry"},
+                    )
                     time.sleep(delay)
             
             if last_exception:
@@ -64,11 +98,20 @@ def rag_search_tool(query: str):
     Returns:
         dict: Response from the RAG service with answer and sources
     """
+    if requests is None:
+        return {
+            "query": query,
+            "answer": "RAG search is unavailable because the requests package is not installed.",
+            "sources": "",
+            "status": "degraded",
+            "error": "requests_not_installed",
+        }
+
     # Call the real API endpoint
     response = requests.post(
-        f"{API_BASE_URL}/qa",
+        f"{settings.api_base_url}/qa",
         json={"query": query},
-        timeout=API_REQUEST_TIMEOUT
+        timeout=settings.upstream_timeout_seconds
     )
     response.raise_for_status()
 
@@ -94,12 +137,21 @@ def compliance_scan_tool(email_id: str):
     Returns:
         dict: Compliance scan results with violations and risk level
     """
+    if requests is None:
+        return {
+            "email_id": email_id,
+            "analysis": {"error": "Compliance scan is unavailable because requests is not installed."},
+            "context_used": "",
+            "status": "degraded",
+            "error": "requests_not_installed",
+        }
+
     try:
         # Call the real API endpoint
         response = requests.post(
-            f"{API_BASE_URL}/scan-email",
+            f"{settings.api_base_url}/scan-email",
             json={"email_id": email_id},
-            timeout=API_REQUEST_TIMEOUT
+            timeout=settings.upstream_timeout_seconds
         )
         response.raise_for_status()
         
@@ -113,7 +165,7 @@ def compliance_scan_tool(email_id: str):
             "status": "success"
         }
     except Exception as e:
-        logger.error(f"[MCP] Compliance scan error: {e}")
+        logger.exception("Compliance scan error", extra={"tool": "compliance_scan", "status": "error"})
         return {
             "email_id": email_id,
             "analysis": {"error": f"Error during compliance scan: {str(e)}"},
@@ -121,3 +173,88 @@ def compliance_scan_tool(email_id: str):
             "status": "error",
             "error": str(e)
         }
+
+
+TOOL_REGISTRY: Dict[str, ToolSpec] = {
+    "ping": ToolSpec(
+        name="ping",
+        handler=lambda: {"status": "ok", "service": settings.service_name},
+        description="Check MCP tool invocation connectivity.",
+        required_args=[],
+        optional_args=[],
+    ),
+    "analyze_text": ToolSpec(
+        name="analyze_text",
+        handler=extract_risk,
+        description="Analyze free text for simple keyword-driven compliance risk.",
+        required_args=["text"],
+        optional_args=[],
+    ),
+    "compliance_scan": ToolSpec(
+        name="compliance_scan",
+        handler=compliance_scan_tool,
+        description="Run compliance scanning for an email ID through the compliance API.",
+        required_args=["email_id"],
+        optional_args=[],
+    ),
+    "rag_search": ToolSpec(
+        name="rag_search",
+        handler=rag_search_tool,
+        description="Search compliance knowledge through the RAG API.",
+        required_args=["query"],
+        optional_args=[],
+    ),
+}
+
+
+def list_tools() -> List[Dict[str, Any]]:
+    return [
+        {
+            "name": spec.name,
+            "description": spec.description,
+            "input_schema": spec.input_schema,
+            "timeout_seconds": spec.timeout_seconds,
+        }
+        for spec in TOOL_REGISTRY.values()
+    ]
+
+
+def validate_tool_arguments(tool_name: str, arguments: Dict[str, Any]) -> ToolSpec:
+    if tool_name not in TOOL_REGISTRY:
+        raise ToolValidationError(f"Unknown tool: {tool_name}")
+
+    if not isinstance(arguments, dict):
+        raise ToolValidationError("Tool arguments must be a JSON object")
+
+    spec = TOOL_REGISTRY[tool_name]
+    missing = [arg for arg in spec.required_args if arg not in arguments]
+    if missing:
+        raise ToolValidationError(f"Missing required argument(s): {', '.join(missing)}")
+
+    allowed = set(spec.required_args + spec.optional_args)
+    unexpected = [arg for arg in arguments if arg not in allowed]
+    if unexpected:
+        raise ToolValidationError(f"Unexpected argument(s): {', '.join(unexpected)}")
+
+    for key, value in arguments.items():
+        if not isinstance(value, str):
+            raise ToolValidationError(f"{key} must be a string")
+        if not value.strip():
+            raise ToolValidationError(f"{key} must not be empty")
+        if len(value) > settings.max_text_chars:
+            raise ToolValidationError(f"{key} exceeds maximum length of {settings.max_text_chars} characters")
+
+    return spec
+
+
+def execute_tool(tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    spec = validate_tool_arguments(tool_name, arguments)
+    started = time.time()
+    result = spec.handler(**arguments)
+    duration_ms = round((time.time() - started) * 1000, 2)
+    return {
+        "tool": tool_name,
+        "status": result.get("status", "success") if isinstance(result, dict) else "success",
+        "duration_ms": duration_ms,
+        "structured_content": result,
+    }
