@@ -14,6 +14,7 @@ This repository previously contained several phase-planning documents that descr
 | [QUICK_REFERENCE.md](QUICK_REFERENCE.md) | Developer commands, curl checks, and debugging reference. |
 | [ARCHITECTURE_ANALYSIS.md](ARCHITECTURE_ANALYSIS.md) | Current architecture, component responsibilities, and known technical debt. |
 | [ARCHITECTURE_DIAGRAMS.md](ARCHITECTURE_DIAGRAMS.md) | Current runtime/data-flow diagrams. |
+| [docs/ADK_A2A_INTEROPERABILITY.md](docs/ADK_A2A_INTEROPERABILITY.md) | Phase 7 ADK metadata, A2A card/endpoints, validation, and deployment guidance. |
 | [docs/SETUP_LEARNINGS_AND_RUNBOOK.md](docs/SETUP_LEARNINGS_AND_RUNBOOK.md) | Operational runbook for WSL/Docker testing and troubleshooting. |
 
 ## Removed Documents

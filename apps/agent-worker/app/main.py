@@ -5,8 +5,9 @@ import logging
 
 from pydantic import BaseModel
 
-from agents.graph import graph
-from agents.memory import get_memory, save_memory
+from agents.a2a_adapter import handle_jsonrpc
+from agents.interop_metadata import build_adk_agent_metadata, build_agent_card
+from agents.runtime import invoke_langgraph_agent
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -34,49 +35,29 @@ def health():
     }
 
 
+@app.get("/.well-known/agent.json")
+def agent_json():
+    return build_agent_card()
+
+
+@app.get("/.well-known/agent-card.json")
+def agent_card_json():
+    return build_agent_card()
+
+
+@app.get("/adk/agent")
+def adk_agent_metadata():
+    return build_adk_agent_metadata()
+
+
+@app.post("/a2a")
+def a2a_endpoint(request: dict):
+    return handle_jsonrpc(request)
+
+
 @app.post("/run")
 def run_agent(request: RunRequest):
-
-    memory = get_memory(request.session_id)
-
-    initial_state = {
-
-        "user_input": request.input,
-
-        "session_id": request.session_id,
-
-        "conversation_history": memory,
-
-        "messages": [],
-
-        "current_plan": "",
-
-        "selected_tool": "",
-        "tool_args": {},
-
-        "tool_result": "",
-
-        "iteration_count": 0,
-        "max_iterations": 3,
-
-        "final_response": "",
-
-        "should_continue": False,
-
-        "errors": [],
-
-        "observations": [],
-    }
-
-    result = graph.invoke(initial_state)
-
-    save_memory(
-        request.session_id,
-        {
-            "user": request.input,
-            "response": result.get("final_response"),
-        }
-    )
+    result = invoke_langgraph_agent(request.input, session_id=request.session_id)
 
     return {
         "result": result

@@ -132,6 +132,7 @@ services:
       - POSTGRES_DB=compliance
       - OLLAMA_BASE_URL=http://ollama:11434
       - MCP_BASE_URL=http://mcp-server:8001
+      - AGENT_PUBLIC_URL=${AGENT_PUBLIC_URL:-http://localhost:8002}
       - MCP_TIMEOUT=${MCP_TIMEOUT:-180}
       - PLANNER_TIMEOUT=${PLANNER_TIMEOUT:-180}
     volumes:

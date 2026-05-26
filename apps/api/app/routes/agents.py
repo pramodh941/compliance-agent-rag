@@ -15,6 +15,9 @@ from app.services.agent_service import (
     get_session,
     list_sessions,
     health_check,
+    get_agent_card,
+    get_adk_metadata,
+    send_a2a_jsonrpc,
     AgentServiceError,
     AgentConnectionError,
     AgentTimeoutError
@@ -95,6 +98,35 @@ def agent_health():
     """
     
     return health_check()
+
+
+@router.get("/card")
+def agent_card():
+    """Return the A2A-compatible agent card published by agent-worker."""
+    try:
+        return get_agent_card()
+    except AgentServiceError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/adk")
+def adk_metadata():
+    """Return ADK-compatible metadata for this repository's compliance agent."""
+    try:
+        return get_adk_metadata()
+    except AgentServiceError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/a2a")
+def a2a_proxy(payload: dict):
+    """Proxy a JSON-RPC A2A message to the agent-worker A2A adapter."""
+    try:
+        return send_a2a_jsonrpc(payload)
+    except AgentTimeoutError as e:
+        raise HTTPException(status_code=504, detail=str(e))
+    except AgentServiceError as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
 
 @router.get("/sessions/{session_id}")

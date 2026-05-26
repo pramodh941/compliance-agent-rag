@@ -1,4 +1,17 @@
+import json
+
+from agents.interop_skills import WORKFLOW_DIRECTIVE_PREFIX
+
+
 def route_intent(user_input: str):
+    if user_input.startswith(WORKFLOW_DIRECTIVE_PREFIX):
+        try:
+            directive = json.loads(user_input[len(WORKFLOW_DIRECTIVE_PREFIX):])
+            plan = directive.get("mcp_plan")
+            if isinstance(plan, dict) and "tool" in plan and "arguments" in plan:
+                return plan
+        except (json.JSONDecodeError, TypeError):
+            return None
 
     text = user_input.lower()
 

@@ -278,3 +278,39 @@ def health_check() -> Dict[str, Any]:
             "agent_worker": "disconnected",
             "error": str(e)
         }
+
+
+def get_agent_card() -> Dict[str, Any]:
+    """Fetch machine-readable A2A agent card metadata from agent-worker."""
+    try:
+        response = requests.get(f"{AGENT_WORKER_URL}/.well-known/agent-card.json", timeout=5)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        logger.exception("Error retrieving agent card")
+        raise AgentServiceError(f"Could not retrieve agent card: {str(e)}")
+
+
+def get_adk_metadata() -> Dict[str, Any]:
+    """Fetch ADK-compatible agent metadata from agent-worker."""
+    try:
+        response = requests.get(f"{AGENT_WORKER_URL}/adk/agent", timeout=5)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        logger.exception("Error retrieving ADK metadata")
+        raise AgentServiceError(f"Could not retrieve ADK metadata: {str(e)}")
+
+
+def send_a2a_jsonrpc(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Forward a JSON-RPC A2A request to agent-worker."""
+    try:
+        response = requests.post(f"{AGENT_WORKER_URL}/a2a", json=payload, timeout=AGENT_RUN_TIMEOUT)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.Timeout as e:
+        logger.error("A2A request timed out: %s", e)
+        raise AgentTimeoutError(f"A2A request timed out after {AGENT_RUN_TIMEOUT}s: {str(e)}")
+    except Exception as e:
+        logger.exception("Error forwarding A2A request")
+        raise AgentServiceError(f"Could not execute A2A request: {str(e)}")
